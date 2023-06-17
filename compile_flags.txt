@@ -1,0 +1,17 @@
+-nostdlibinc
+-I
+/home/elias/Documents/projects/ccs1230/ccs/ccs_base/msp430/include
+-I
+/home/elias/Documents/projects/ccs1230/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include
+-I
+/home/elias/Documents/current_sem/digital_computers_workspace/lab1
+-I
+./
+-I
+./header/
+-I
+C:/ti/ccs1220/ccs/ccs_base/msp430/include
+-I
+C:/ti/ccs1220/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS
+-D
+__MSP430G2553__

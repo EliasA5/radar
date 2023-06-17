@@ -1,3 +1,14 @@
 *.beam
 *.o
 
+.settings
+targetConfigs
+.ccsproject
+.cproject
+.project
+lnk_*.cmd
+.launches
+.vscode
+Debug
+imgs
+Release
