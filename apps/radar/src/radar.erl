@@ -19,6 +19,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 handle_event/2, terminate/2, code_change/3]).
 
+-define(WXSERVER, ?MODULE).
+
 -record(state, {}).
 
 %%%===================================================================
@@ -33,7 +35,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    wx_object:start_link(?MODULE, [], []).
+    wx_object:start_link({global, ?WXSERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% wx_object callbacks
@@ -53,6 +55,7 @@ start_link() ->
 init([]) ->
     wx:new(),
     Frame = wxFrame:new(),
+    schedule_frames(),
     {Frame, #state{}}.
 
 %%--------------------------------------------------------------------
@@ -110,6 +113,8 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({new_frame}, State) ->
+    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -142,4 +147,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+schedule_frames() ->
+  timer:send_interval(40, ?WXSERVER, {new_frame}).
 
