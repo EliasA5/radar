@@ -1,6 +1,7 @@
 .rebar3
 _*
 .eunit
+*.o
 *.beam
 *.plt
 *.swp
@@ -16,4 +17,3 @@ _build
 *.iml
 rebar3.crashdump
 *~
-*.o

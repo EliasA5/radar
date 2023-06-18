@@ -1,0 +1,4 @@
+[{<<"serial">>,
+  {git,"https://github.com/EliasA5/erlang-serial.git",
+       {ref,"55ed9fd68a2ca859cb86652ef57e721c75b5475e"}},
+  0}].
