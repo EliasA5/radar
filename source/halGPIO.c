@@ -66,7 +66,7 @@ void enterLPM(unsigned char LPM_level)
 		_BIS_SR(LPM4_bits); /* Enter Low Power Mode 4 */
 }
 
-inline void enable_interrupts()
+void enable_interrupts()
 {
 	_BIS_SR(GIE);
 }
@@ -86,6 +86,7 @@ int state7_handler();
 
 char file_buf[60] = {0};
 char file_buf_idx = 0;
+extern unsigned char telem_deg;
 // USCI A0/B0 Receive ISR
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=USCIAB0RX_VECTOR
@@ -99,7 +100,6 @@ void USCI0RX_ISR (void)
 	unsigned int wakeup = 0;
 	unsigned int err = 0;
 	unsigned char rec = UCA0RXBUF;
-	unsigned int deg;
 	static unsigned int rec_file = 0;
 
 	if(rec_file){
@@ -156,10 +156,12 @@ void USCI0RX_ISR (void)
 			}
 			break;
 		case 1:
-			deg = rec & 0x3f;
-			set_radar_deg((deg << 1) + deg);
+			// enter telemeter state
+			telem_deg = rec & 0x3f;
+			telem_deg = (telem_deg << 1) + telem_deg;
 			break;
 		case 2:
+			// enter file recv state
 			rec_file = rec & 0x3f;
 			file_buf_idx = 0;
 			break;

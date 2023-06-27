@@ -17,7 +17,7 @@ extern void delay(unsigned int);
 extern void delayms(unsigned int);
 
 extern void enterLPM(unsigned char);
-extern inline void enable_interrupts();
+extern void enable_interrupts();
 extern inline void disable_interrupts();
 
 extern void send_char(char ch);

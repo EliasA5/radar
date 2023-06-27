@@ -2,34 +2,6 @@
 #include "../header/halGPIO.h"      // private library - HAL layer
 #include "../header/LCD.h"
 
-void printSWs2LEDs(void)
-{
-	unsigned char ch;
-
-	ch = readSWs();
-	print2LEDs(ch);
-}
-
-void printArr2SWs(char Arr[], int size, unsigned int rate)
-{
-	unsigned int i;
-
-	for(i=0; i<size; i++){
-		print2LEDs(Arr[i]);
-		delayms(rate);
-	}
-}
-
-void printCharArr2SWs(char Arr[], int size, unsigned int rate)
-{
-	unsigned int i;
-
-	for(i=0; i<size; i++){
-		print2LEDs(Arr[i]-'0');
-		delayms(rate);
-	}
-}
-
 
 static char digits[] = "0123456789ABCDEF";
 char *print_int(unsigned int x)
@@ -78,6 +50,8 @@ char *print_qformat_2_8(unsigned int x)
 
 	return buf;
 }
+
+unsigned int telem_deg = 0;
 
 void state1_enter()
 {
