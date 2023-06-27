@@ -22,7 +22,7 @@
 -define(SERVER, ?MODULE).
 
 -record(data, {rec_buf, rec_amount, rec_type, serial_port, operator_port,
-              expected_ack, msg_ack, postpones}).
+              expected_ack, msg_ack, postpones, file}).
 -define(TIMEOUT_TIME, 5000).
 
 %%%===================================================================
@@ -116,8 +116,8 @@ idle(cast, {send, telemeter, Angle}, Data) ->
   Msg = Data#data.serial_port ! {send, <<?PCMSP_TELEMETER:2, (Angle div 3):6>>},
   {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_TELEMETER, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(cast, {send, file, File}, Data) ->
-  Msg = Data#data.serial_port ! {send, <<?PCMSP_FILE:2, (byte_size(File)):6, File/binary>>},
-  {new_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+  Msg = Data#data.serial_port ! {send, <<?PCMSP_FILE:2, (byte_size(File)):6>>},
+  {new_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, msg_ack = Msg, postpones = 0, file = File}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(cast, {send, Opcode, _OpData}, Data) ->
   Msg = Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
   {new_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
@@ -139,11 +139,14 @@ rec_ack(info, {data, <<?MSPPC_ULTRASONIC:2, _Ack:6>>}, Data) ->
   {new_state, rec_ack, Data#data{postpones = 2}, postpone};
 rec_ack(info, {data, <<?MSPPC_LDR:2, _Ack:6>>}, Data) ->
   {new_state, rec_ack, Data#data{postpones = 1}, postpone};
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) when Ack =:= ?PCMSP_FILE ->
+  Data#data.serial_port ! {send, Data#data.file},
+  {new_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) ->
   {new_state, idle, Data};
 rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
   Data#data.serial_port ! Data#data.msg_ack,
-  {new_state, rec_ack, Data, {state_timeout, 5000, Data}};
+  {new_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(cast, _Msg, Data) ->
   {new_state, rec_ack, Data, postpone};
 rec_ack(state_timeout, _Msg, Data) ->
