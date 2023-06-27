@@ -9,36 +9,36 @@ extern void ADC10_handler(void);
 extern char *print_int(unsigned int x);
 extern char *print_qformat_2_8(unsigned int x);
 
-extern void state1_enter();
-extern int state1_handler();
-extern void state1_leave();
+extern void telemeter_s_enter();
+extern int telemeter_s_handler();
+extern void telemeter_s_leave();
 
-extern void state2_enter();
-extern int state2_handler();
-extern void state2_leave();
+extern void file_rec_s_enter();
+extern int file_rec_s_handler();
+extern void file_rec_s_leave();
 
-extern void state3_enter();
-extern int state3_handler();
-extern void state3_leave();
+extern void sonic_d_enter();
+extern int sonic_d_handler();
+extern void sonic_d_leave();
 
-extern void state4_enter();
-extern int state4_handler();
-extern void state4_leave();
+extern void ldr_d_enter();
+extern int ldr_d_handler();
+extern void ldr_d_leave();
 
-extern void state5_enter();
-extern int state5_handler();
-extern void state5_leave();
+extern void dual_d_enter();
+extern int dual_d_handler();
+extern void dual_d_leave();
 
-extern void state6_enter();
-extern int state6_handler();
-extern void state6_leave();
+extern void file_1_enter();
+extern int file_1_handler();
+extern void file_1_leave();
 
-extern void state7_enter();
-extern int state7_handler();
-extern void state7_leave();
+extern void file_2_enter();
+extern int file_2_handler();
+extern void file_2_leave();
 
-extern void state8_enter();
-extern int state8_handler();
-extern void state8_leave();
+extern void file_3_enter();
+extern int file_3_handler();
+extern void file_3_leave();
 
 #endif

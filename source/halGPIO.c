@@ -76,16 +76,17 @@ inline void disable_interrupts()
 	_BIC_SR(GIE);
 }
 
-int state1_handler();
-int state2_handler();
-int state3_handler();
-int state4_handler();
-int state5_handler();
-int state6_handler();
-int state7_handler();
+int telemeter_s_handler();
+int file_rec_s_handler();
+int sonic_d_handler();
+int ldr_d_handler();
+int dual_d_handler();
+int file_1_handler();
+int file_2_handler();
+int file_3_handler();
 
-char file_buf[60] = {0};
-char file_buf_idx = 0;
+extern char *file_buf;
+extern char file_buf_idx;
 extern unsigned char telem_deg;
 // USCI A0/B0 Receive ISR
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
@@ -100,54 +101,52 @@ void USCI0RX_ISR (void)
 	unsigned int wakeup = 0;
 	unsigned int err = 0;
 	unsigned char rec = UCA0RXBUF;
-	static unsigned int rec_file = 0;
+	static unsigned int file_size = 0;
 
-	if(rec_file){
+	if(file_size){
 		file_buf[file_buf_idx] = rec;
 		file_buf_idx++;
-		if(file_buf_idx == rec_file){
-			file_buf[file_buf_idx] = 0;
-			write_flash(file_buf, rec_file);
-			rec_file = 0;
-			goto reply;
-		}
-		return;	
+		if(file_buf_idx != file_size)
+			return;
+		file_buf[file_buf_idx] = 0;
+		// write to flash on file_rec_s leave
+		// write_flash(file_buf, file_size);
+		file_size = 0;
+		state = idle;
+		wakeup = 1;
+		goto wakeup;
 	}
 
 	switch((rec & 0xc0) >> 6)
 	{
 		case 0:
 			switch ((rec & 0x3f)) {
-				case 0:
+				case idle:
 					state = idle;
 					wakeup = 1;
 					break;
-				case 1:
-					state = state1;
+				case sonic_d:
+					state = sonic_d;
 					wakeup = 1;
 					break;
-				case 2:
-					state = state2;
+				case ldr_d:
+					state = ldr_d;
 					wakeup = 1;
 					break;
-				case 3:
-					state = state3;
+				case dual_d:
+					state = dual_d;
 					wakeup = 1;
 					break;
-				case 4:
-					state = state4;
+				case file_1:
+					state = file_1;
 					wakeup = 1;
 					break;
-				case 5:
-					state = state5;
+				case file_2:
+					state = file_2;
 					wakeup = 1;
 					break;
-				case 6:
-					state = state6;
-					wakeup = 1;
-					break;
-				case 7:
-					state = state7;
+				case file_3:
+					state = file_3;
 					wakeup = 1;
 					break;
 				default:
@@ -159,21 +158,28 @@ void USCI0RX_ISR (void)
 			// enter telemeter state
 			telem_deg = rec & 0x3f;
 			telem_deg = (telem_deg << 1) + telem_deg;
+			state = telemeter_s;
+			wakeup = 1;
 			break;
 		case 2:
-			// enter file recv state
-			rec_file = rec & 0x3f;
+			// send ack at the end of rec_file_s enter
+			file_size = rec & 0x3f;
 			file_buf_idx = 0;
+			state = file_rec_s;
+			wakeup = 1;
+			goto wakeup;
 			break;
 		default:
 			break;
 	}
 
+// maybe put reply at end of state enter
 reply:
 	// TODO add ack maker function
 	while((IFG2 & UCA0TXIFG) == 0);
 	UCA0TXBUF = err;
 
+wakeup:
 	if(wakeup == 0)
 		return;
 
@@ -217,13 +223,14 @@ void USCI0TX_ISR (void)
 	switch(state)
 	{
 		case idle: break;
-		case state1: break;
-		case state2: break;
-		case state3: break;
-		case state4: break;
-		case state5: break;
-		case state6: break;
-		case state7: break;
+		case telemeter_s: break;
+		case file_rec_s: break;
+		case sonic_d: break;
+		case ldr_d: break;
+		case dual_d: break;
+		case file_1: break;
+		case file_2: break;
+		case file_3: break;
 		default: break;
 	}
 
@@ -276,20 +283,15 @@ void TIMER0_A1_ISR (void)
 	  case TA0IV_TAIFG:                     // Vector 10:  TAIFG
 			switch(state)
 			{
-				case state1:
-					state1_handler();
-					break;
-				case state2:
-					state2_handler();
-					break;
-				case state3:
-					state3_handler();
-					break;
-				case state5:
-				    state5_handler();
-					break;
-				default:
-					break;
+				case idle: break;
+				case telemeter_s: break;
+				case file_rec_s: break;
+				case sonic_d: break;
+				case ldr_d: break;
+				case dual_d: break;
+				case file_1: break;
+				case file_2: break;
+				case file_3: break;
 			}
 	  break;
 	  default: break;

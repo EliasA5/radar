@@ -19,52 +19,57 @@ void main(void) {
 				enterLPM(lpm_mode);
 				break;
 
-			case state1:
-				state1_enter();
+			case telemeter_s:
+				telemeter_s_enter();
 				enable_interrupts();
 				enterLPM(lpm_mode);
-				state1_leave();
+				telemeter_s_leave();
 				break;
 
-			case state2:
-				state2_enter();
+			case file_rec_s:
+				file_rec_s_enter();
 				enable_interrupts();
 				enterLPM(lpm_mode);
-				state2_leave();
+				file_rec_s_leave();
 				break;
 
-			case state3:
-				state3_enter();
+			case sonic_d:
+				sonic_d_enter();
 				enable_interrupts();
 				enterLPM(lpm_mode);
-				state3_leave();
+				sonic_d_leave();
 				break;
 
-			case state4:
-				state4_enter();
+			case ldr_d:
+				ldr_d_enter();
 				enable_interrupts();
 				enterLPM(lpm_mode);
-				state4_leave();
+				ldr_d_leave();
 				break;
 
-			case state5:
-				state5_enter();
+			case dual_d:
+				dual_d_enter();
 				enable_interrupts();
 				enterLPM(lpm_mode);
-				state5_leave();
+				dual_d_leave();
 				break;
 
-			case state6:
-				state6_enter();
-				state6_handler();
-				state6_leave();
-				break;
-
-			case state7:
-				state7_enter();
-				enable_interrupts();
+			case file_1:
+				file_1_enter();
 				enterLPM(lpm_mode);
-				state7_leave();
+				file_2_leave();
+				break;
+
+			case file_2:
+				file_2_enter();
+				enterLPM(lpm_mode);
+				file_2_leave();
+				break;
+
+			case file_3:
+				file_3_enter();
+				enterLPM(lpm_mode);
+				file_3_leave();
 				break;
 
 		}
