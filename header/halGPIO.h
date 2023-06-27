@@ -9,28 +9,21 @@ extern enum SYSmode lpm_mode; // global variable
 
 extern void sysConfig(void);
 
-extern void print2LEDs(unsigned char);
-extern void clrLEDs(void);
-extern void toggleLEDs(char);
-extern void setLEDs(char);
-extern unsigned char readSWs(void);
 extern inline void set_timer_interrupt(unsigned int t);
 extern void set_pwm_speed(unsigned int s);
+extern void set_radar_deg(int degree);
 
 extern void delay(unsigned int);
 extern void delayms(unsigned int);
-
-extern void incLEDs(char);
-extern void shiftLeftLEDs(char);
-extern void shiftRightLEDs(char);
 
 extern void enterLPM(unsigned char);
 extern inline void enable_interrupts();
 extern inline void disable_interrupts();
 
-extern char readKeyPad();
-
 extern void send_char(char ch);
+
+extern void write_flash(char *buf, char sz);
+
 
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=PORT1_VECTOR
