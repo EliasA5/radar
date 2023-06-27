@@ -23,6 +23,7 @@
 
 -record(data, {rec_buf, rec_amount, rec_type, serial_port, operator_port,
               expected_ack, msg_ack, postpones}).
+-define(TIMEOUT_TIME, 5000).
 
 %%%===================================================================
 %%% API
@@ -101,6 +102,28 @@ init(Args) ->
 		 Data :: term()) ->
 	  gen_statem:event_handler_result(atom()).
 
+% ultrasonic
+idle(info, {data, <<?MSPPC_ULTRASONIC:2, Degree:6>>}, Data) ->
+  {next_state, rec, Data#data{rec_type = ultrasonic, rec_amount = 2, rec_buf = <<Degree:8>>}, ?TIMEOUT_TIME};
+% ldr
+idle(info, {data, <<?MSPPC_LDR:2, Degree:6>>}, Data) ->
+  {next_state, rec, Data#data{rec_type = ldr, rec_amount = 1, rec_buf = <<Degree:8>>}, ?TIMEOUT_TIME};
+idle(info, {data, Byte}, _Data) ->
+  io:format("got unexpected data from msp430: ~w~n", [Byte]),
+  keep_state_and_data;
+% commands to send
+idle(cast, {send, telemeter, Angle}, Data) ->
+  Msg = Data#data.serial_port ! {send, <<?PCMSP_TELEMETER:2, (Angle div 3):6>>},
+  {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_TELEMETER, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+idle(cast, {send, file, File}, Data) ->
+  Msg = Data#data.serial_port ! {send, <<?PCMSP_FILE:2, (byte_size(File)):6, File/binary>>},
+  {new_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+idle(cast, {send, Opcode, _OpData}, Data) ->
+  Msg = Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
+  {new_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+idle(info, {'EXIT', _PID, _Reason}, _Data) ->
+  {stop, _Reason}.
+
 -spec rec_ack('enter',
 		 OldState :: atom(),
 		 Data :: term()) ->
@@ -109,6 +132,25 @@ init(Args) ->
 		 Msg :: term(),
 		 Data :: term()) ->
 	  gen_statem:event_handler_result(atom()).
+
+rec_ack(info, _Msg, Data = #data{postpones = Postpones}) when Postpones =/= 0 ->
+  {new_state, rec_ack, Data#data{postpones = Postpones-1}, postpone};
+rec_ack(info, {data, <<?MSPPC_ULTRASONIC:2, _Ack:6>>}, Data) ->
+  {new_state, rec_ack, Data#data{postpones = 2}, postpone};
+rec_ack(info, {data, <<?MSPPC_LDR:2, _Ack:6>>}, Data) ->
+  {new_state, rec_ack, Data#data{postpones = 1}, postpone};
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) ->
+  {new_state, idle, Data};
+rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
+  Data#data.serial_port ! Data#data.msg_ack,
+  {new_state, rec_ack, Data, {state_timeout, 5000, Data}};
+rec_ack(cast, _Msg, Data) ->
+  {new_state, rec_ack, Data, postpone};
+rec_ack(state_timeout, _Msg, Data) ->
+  {new_state, idle, Data};
+rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
+  {stop, _Reason}.
+
 -spec rec('enter',
 		 OldState :: atom(),
 		 Data :: term()) ->
@@ -117,6 +159,28 @@ init(Args) ->
 		 Msg :: term(),
 		 Data :: term()) ->
 	  gen_statem:event_handler_result(atom()).
+rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic, rec_amount = 1}) ->
+  % send data to upper layer, goto idle
+  RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
+  gen_server:cast(Data#data.operator_port, {ultrasonic, format_ultrasonic(RecBuf)}),
+  {next_state, idle, Data, ?TIMEOUT_TIME};
+rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic}) ->
+  %append Byte to rec buffer
+  Rec_amount = Data#data.rec_amount-1,
+  RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
+  {next_state, rec, Data#data{rec_amount = Rec_amount, rec_buf = RecBuf}, ?TIMEOUT_TIME};
+rec(info, {data, Byte}, Data = #data{rec_type = ldr, rec_amount = 1}) ->
+  % send data to upper layer, goto idle
+  RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
+  gen_server:cast(Data#data.operator_port, {ldr, format_ldr(RecBuf)}),
+  {next_state, idle, Data};
+rec(cast, _Msg, Data) ->
+  {next_state, rec, Data, [postpone, 5000]};
+rec(timeout, _Msg, _Data) ->
+  {stop, timeout};
+rec(info, {'EXIT', _PID, _Reason}, _Data) ->
+  {stop, _Reason}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
