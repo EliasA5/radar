@@ -10,21 +10,27 @@
 
 -behaviour(gen_statem).
 
+-include("defs.hrl").
+
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_statem callbacks
 -export([callback_mode/0, init/1, terminate/3, code_change/4]).
--export([state_name/3]).
+-export([idle/3, rec_ack/3, rec/3]).
 
 -define(SERVER, ?MODULE).
 
--record(data, {}).
+-record(data, {rec_buf, rec_amount, rec_type, serial_port, operator_port,
+              expected_ack, msg_ack, postpones}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% user exposed API's
+%%--------------------------------------------------------------------
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a gen_statem process which calls Module:init/1 to
@@ -33,12 +39,12 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_link() ->
+-spec start_link(Args :: term()) ->
 	  {ok, Pid :: pid()} |
 	  ignore |
 	  {error, Error :: term()}.
-start_link() ->
-    gen_statem:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Args) ->
+    gen_statem:start_monitor(?MODULE, Args, []).
 
 %%%===================================================================
 %%% gen_statem callbacks
@@ -64,8 +70,18 @@ callback_mode() -> state_functions.
 -spec init(Args :: term()) ->
 	  gen_statem:init_result(atom()).
 init([]) ->
-    process_flag(trap_exit, true),
-    {ok, state_name, #data{}}.
+  {error, no_port_given};
+init(Args) ->
+  process_flag(trap_exit, true),
+  case proplists:get_value(port_file, Args) of
+    undefined ->
+      {error, no_port_given};
+    PortFile ->
+      Speed = proplists:get_value(speed, Args, 9600),
+      OperatorPort = proplists:get_value(operator, Args, operator),
+      SerialPort = serial:start([{open, PortFile}, {speed, Speed}]),
+      {ok, idle, #data{operator_port = OperatorPort, serial_port = SerialPort}}
+  end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -76,7 +92,7 @@ init([]) ->
 %% is called to handle the event.
 %% @end
 %%--------------------------------------------------------------------
--spec state_name('enter',
+-spec idle('enter',
 		 OldState :: atom(),
 		 Data :: term()) ->
 	  gen_statem:state_enter_result('state_name');
@@ -84,9 +100,23 @@ init([]) ->
 		 Msg :: term(),
 		 Data :: term()) ->
 	  gen_statem:event_handler_result(atom()).
-state_name({call,Caller}, _Msg, Data) ->
-    {next_state, state_name, Data, [{reply,Caller,ok}]}.
 
+-spec rec_ack('enter',
+		 OldState :: atom(),
+		 Data :: term()) ->
+	  gen_statem:state_enter_result('state_name');
+		(gen_statem:event_type(),
+		 Msg :: term(),
+		 Data :: term()) ->
+	  gen_statem:event_handler_result(atom()).
+-spec rec('enter',
+		 OldState :: atom(),
+		 Data :: term()) ->
+	  gen_statem:state_enter_result('state_name');
+		(gen_statem:event_type(),
+		 Msg :: term(),
+		 Data :: term()) ->
+	  gen_statem:event_handler_result(atom()).
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -118,5 +148,11 @@ code_change(_OldVsn, State, Data, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+format_ultrasonic(RecBuf) ->
+  RecBuf.
+
+format_ldr(RecBuf) ->
+  RecBuf.
 
 
