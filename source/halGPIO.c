@@ -209,6 +209,38 @@ wakeup:
 
 }
 
+char tx_buf[32];
+char tx_head = 0;
+char tx_tail = 0;
+char tx_is_empty = 1;
+
+void add_msg_tx_queue(char *buf, char len);
+
+void add_ack_tx_queue(char opcode)
+{
+	char empty = (tx_tail - tx_head) & 0x1f;
+	if(!tx_is_empty && empty == 0){
+		// busy wait until we can send 1 byte
+		while((IFG2 & UCA0TXIFG) == 0);
+		USCI0TX_ISR();
+	}
+
+	add_msg_tx_queue(&opcode, 1);
+}
+
+void add_msg_tx_queue(char *buf, char len)
+{
+	char empty = (tx_tail - tx_head) & 0x1f;
+	unsigned char i;
+	if(!tx_is_empty && len > empty)
+		return;
+	for(i = 0; i < len; i--, tx_head = (tx_head + 1) & 0x1f)
+		tx_buf[tx_head] = buf[i];
+	tx_is_empty = 0;
+	IE2 |= UCA0TXIE;
+}
+
+
 // USCI A0/B0 Transmit ISR
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=USCIAB0TX_VECTOR
@@ -219,46 +251,11 @@ void USCI0TX_ISR (void)
 #error Compiler not supported!
 #endif
 {
-	unsigned int wakeup = 0;
-	switch(state)
-	{
-		case idle: break;
-		case telemeter_s: break;
-		case file_rec_s: break;
-		case sonic_d: break;
-		case ldr_d: break;
-		case dual_d: break;
-		case file_1: break;
-		case file_2: break;
-		case file_3: break;
-		default: break;
-	}
-
-	if(wakeup == 0)
-		return;
-
-	disable_interrupts();
-	switch(lpm_mode)
-	{
-		case mode0:
-			LPM0_EXIT; // must be called from ISR only
-			break;
-
-		case mode1:
-			LPM1_EXIT; // must be called from ISR only
-			break;
-
-		case mode2:
-			LPM2_EXIT; // must be called from ISR only
-			break;
-
-		case mode3:
-			LPM3_EXIT; // must be called from ISR only
-			break;
-
-		case mode4:
-			LPM4_EXIT; // must be called from ISR only
-			break;
+	UCA0TXBUF = tx_buf[tx_tail];
+	tx_tail = (tx_tail + 1) & 0x1f;
+	if(tx_tail == tx_head){
+		tx_is_empty = 1;
+		IE2 &= ~UCA0TXIE;
 	}
 }
 
