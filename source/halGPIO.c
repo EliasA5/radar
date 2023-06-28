@@ -117,10 +117,10 @@ void USCI0RX_ISR (void)
 		goto wakeup;
 	}
 
-	switch((rec & 0xc0) >> 6)
+	switch(MSGID(rec))
 	{
 		case 0:
-			switch ((rec & 0x3f)) {
+			switch (MSGDATA(rec)) {
 				case idle:
 					state = idle;
 					wakeup = 1;
@@ -156,14 +156,14 @@ void USCI0RX_ISR (void)
 			break;
 		case 1:
 			// enter telemeter state
-			telem_deg = rec & 0x3f;
+			telem_deg = MSGDATA(rec);
 			telem_deg = (telem_deg << 1) + telem_deg;
 			state = telemeter_s;
 			wakeup = 1;
 			break;
 		case 2:
 			// send ack at the end of rec_file_s enter
-			file_size = rec & 0x3f;
+			file_size = MSGDATA(rec);
 			file_buf_idx = 0;
 			state = file_rec_s;
 			wakeup = 1;
