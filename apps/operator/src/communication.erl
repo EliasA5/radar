@@ -13,7 +13,7 @@
 -include("defs.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_monitor/1]).
 
 %% gen_statem callbacks
 -export([callback_mode/0, init/1, terminate/3, code_change/4]).
@@ -40,11 +40,11 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(Args :: term()) ->
+-spec start_monitor(Args :: term()) ->
 	  {ok, Pid :: pid()} |
 	  ignore |
 	  {error, Error :: term()}.
-start_link(Args) ->
+start_monitor(Args) ->
     gen_statem:start_monitor(?MODULE, Args, []).
 
 %%%===================================================================
@@ -141,6 +141,7 @@ rec_ack(info, {data, <<?MSPPC_LDR:2, _Ack:6>>}, Data) ->
   {new_state, rec_ack, Data#data{postpones = 1}, postpone};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) when Ack =:= ?PCMSP_FILE ->
   Data#data.serial_port ! {send, Data#data.file},
+  % what type of ack should we expect?
   {new_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) ->
   {new_state, idle, Data};
