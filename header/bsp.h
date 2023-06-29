@@ -50,15 +50,16 @@
 
 //Timer A1 abstraction
 #define Timer1Ctl          TA1CTL
-//TODO check which is which for buzzer on 2.4
-#define Timer1CapCtl       TA1CCTL1
-#define Timer1CmpCtl       TA1CCTL2
+
+#define Timer1Cmp_Servo    TA1CCTL0
+#define Timer1Cap_Ultra    TA1CCTL1
+#define Timer1Cmp_Ultra    TA1CCTL2
 #define TA1COMPARE0        TA1CCR0
 #define TA1COMPARE1        TA1CCR2
 
 // ADC10 abstraction
-#define ADCTimerCtl        ADC10CTL1
-#define ADCOpCtl           ADC10CTL0
+#define ADCLDRCtl0        ADC10CTL0
+#define ADCLDRCtl1        ADC10CTL1
 
 extern void GPIOconfig(void);
 extern void TIMERconfig(void);

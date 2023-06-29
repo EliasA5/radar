@@ -276,12 +276,12 @@ void TIMER0_A1_ISR (void)
 {
 	switch(__even_in_range(TA0IV,0x0A))
 	{
-		case TA0IV_NONE: break;               // Vector  0:  No interrupt
-		case TA0IV_TACCR1: break;             // Vector  2:  TACCR1 CCIFG
-		case TA0IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
-		case TA0IV_6: break;                  // Vector  6:  Reserved CCIFG
-		case TA0IV_8: break;                  // Vector  8:  Reserved CCIFG
-		case TA0IV_TAIFG:                     // Vector 10:  TAIFG
+	  case TA0IV_NONE: break;               // Vector  0:  No interrupt
+	  case TA0IV_TACCR1: break;             // Vector  2:  TACCR1 CCIFG
+	  case TA0IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
+	  case TA0IV_6: break;                  // Vector  6:  Reserved CCIFG
+	  case TA0IV_8: break;                  // Vector  8:  Reserved CCIFG
+	  case TA0IV_TAIFG:                     // Vector 10:  TAIFG
 			switch(state)
 			{
 				case idle: break;

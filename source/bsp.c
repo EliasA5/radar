@@ -43,20 +43,25 @@ void TIMERconfig(void)
 {
 
 	// Timer A0 config
-	Timer0Ctl  = TASSEL_1 + MC_3 + ID_2;
+	Timer0Ctl  = TASSEL_1 + MC_3 + ID_1;
 	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
-	TA0CCR0 = 500;
 
 	Timer1Ctl = TASSEL_2 + MC_1;
-	Timer1CmpCtl = 0;
+
+	//Timer1Cmp_Servo = OUTMOD_3  + CCIE; compare mode for Servo Motor when we need it
+	//Timer1Cmp_Servo &= ~CCIFG;
+
+	//Timer1Cmp_Ultra = CCIE; compare mode with None mode depends on OUT value
+	//Timer1Cap_Ultra = CM_3 + CAP + CCIE; capture mode CCIA2
+
 	Timer1Ctl &= ~TAIFG;
 }
 
 void ADCconfig(void)
 {
-	ADCTimerCtl = INCH_3 + ADC10SSEL_1 + CONSEQ_2 + ADC10DIV_7;
-	ADCOpCtl = SREF_0 + ADC10SHT_2 + MSC;
-	ADC10AE0 = 0x08;
+	ADCLDRCtl0 = SREF_0 + ADC10SHT_2 + MSC;
+	ADCLDRCtl1 = INCH_3 + ADC10SSEL_1 + CONSEQ_3 + ADC10DIV_7;
+	ADC10AE0 = 0x09; // Enable A3 + A0 Analog input
 }
 
 void USCIconfig(void)

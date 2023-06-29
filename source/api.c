@@ -51,6 +51,60 @@ char *print_qformat_2_8(unsigned int x)
 	return buf;
 }
 
+static unsigned int lcd_max = 0;
+int inc_lcd()
+{
+	static unsigned int x = 0;
+	lcd_clear();
+	lcd_puts(print_int(x));
+	x++;
+	if(x >= lcd_max){
+		x = 0;
+		return 1;
+	}
+	return 0;
+}
+
+static unsigned int lcd_dec_x = 0;
+int dec_lcd()
+{
+	lcd_clear();
+	lcd_puts(print_int(lcd_dec_x));
+	lcd_dec_x--;
+	if(lcd_dec_x == 0)
+		return 1;
+	return 0;
+}
+
+unsigned char rra_char = '\0';
+int rra_lcd()
+{
+	static int lcd_index = 0;
+	if(lcd_index == 0){
+		lcd_putchar(rra_char);
+		goto ret;
+	}
+	if(lcd_index == 16){
+		lcd_putchar(' ');
+		lcd_new_line();
+		lcd_putchar(rra_char);
+		goto ret;
+	}
+	lcd_cursor_left();
+	lcd_putchar(' ');
+	lcd_putchar(rra_char);
+
+ret:
+	lcd_index++;
+	if(lcd_index == 32){
+		lcd_index = 0;
+		// TODO check if needed
+		lcd_clear();
+		return 1;
+	}
+	return 0;
+}
+
 unsigned int telem_deg = 0;
 void telemeter_s_enter()
 {
@@ -108,13 +162,23 @@ int sonic_d_handler()
 	return 0;
 }
 
+static int adc10_samples[4] = {0};
 void ldr_d_enter()
 {
+	ADC10DTC1 = 4; // number of transfers
+	ADC10SA  =    adc10_samples;
+	ADCLDRCtl0 |= (ENC + ADC10ON + ADC10IE);
+	ADCLDRCtl0 &= ~ADC10IFG;
+	ADCLDRCtl0 |= ADC10SC;
 	add_ack_tx_queue(MAKEACK(ldr_d));
 }
 
 void ldr_d_leave()
 {
+	ADC10DTC1 = 0;
+	ADC10SA = 0;
+	ADCLDRCtl0 &= ~ADC10IFG;
+	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
 
 }
 
