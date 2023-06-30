@@ -55,7 +55,6 @@ start_link() ->
 init([]) ->
     wx:new(),
     Frame = wxFrame:new(),
-    schedule_frames(),
     {Frame, #state{}}.
 
 %%--------------------------------------------------------------------
