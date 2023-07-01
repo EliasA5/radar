@@ -81,6 +81,20 @@ void write_flash(char *buf, char sz)
 	// TODO implement this
 }
 
+void enable_t0timer(unsigned char d)
+{
+	Timer0Ctl |= TAIE;
+	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
+	TA0CCR0 = (((d << 3) + (d << 1)) << 3);
+}
+
+void disable_t0timer(void)
+{
+	Timer0Ctl &= ~TAIE;
+	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
+	TA0CCR0 = 0;
+}
+
 void enterLPM(unsigned char LPM_level)
 {
 
