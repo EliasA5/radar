@@ -28,11 +28,16 @@ extern void send_char(char ch);
 
 extern void write_flash(char *buf, char sz);
 
-void add_ack_tx_queue(unsigned char opcode);
-void add_msg_tx_queue(unsigned char *buf, unsigned char len);
+extern void add_ack_tx_queue(unsigned char opcode);
+extern void add_msg_tx_queue(unsigned char *buf, unsigned char len);
 
-void enable_t0timer(unsigned char d);
-void disable_t0timer(void);
+extern void enable_t0timer(unsigned char d);
+extern void disable_t0timer(void);
+
+extern void enable_ultrasonic(void);
+extern void disable_ultrasonic(void);
+extern void trigger_ultrasonic(void);
+extern void handle_ultrasonic(unsigned int time);
 
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=PORT1_VECTOR

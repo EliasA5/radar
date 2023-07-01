@@ -107,7 +107,7 @@ ret:
 
 int adc10_samples[16] = {0};
 
-unsigned int telem_deg = 0;
+unsigned char telem_deg = 0;
 void telemeter_s_enter()
 {
 	add_ack_tx_queue(MAKEACK(telemeter_s));
@@ -150,12 +150,17 @@ int file_rec_s_handler(unsigned char next)
 
 void sonic_d_enter()
 {
+	enable_t0timer(100);
+	set_radar_deg(0);
+	enable_ultrasonic();
 	add_ack_tx_queue(MAKEACK(sonic_d));
 }
 
 void sonic_d_leave()
 {
-
+	set_radar_deg(0);
+	disable_ultrasonic();
+	disable_t0timer();
 }
 
 int sonic_d_handler()

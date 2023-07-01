@@ -32,6 +32,7 @@ static unsigned char current_radar_deg = 0;
 void set_radar_deg(unsigned char degree)
 {
 	current_radar_deg = degree;
+	degree = (degree << 1) + degree;
 	TA1COMPARE0 = 26250;
 	TA1COMPARE1 = (25620 - ((degree << 3) + (degree << 1) + degree));
 }
@@ -59,6 +60,40 @@ void deactivate_ldr(void)
 	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
 }
 
+void enable_ultrasonic(void)
+{
+	Timer1Cap_Ultra = CM_3 + CAP + CCIE + CCIS_1; //capture mode CCIA1
+	Timer1Ctl |= TAIE;
+}
+void disable_ultrasonic(void)
+{
+	Timer1Ctl &= ~TAIE;
+	Timer1Cap_Ultra = 0;
+}
+
+void trigger_ultrasonic(void)
+{
+	UltrasonicPort |= UltrasonicPin;
+	delay(11);
+	UltrasonicPort &= ~UltrasonicPin;
+}
+
+void handle_ultrasonic(unsigned int time)
+{
+	static unsigned int prev_time = 0;
+	if(prev_time == 0){
+		prev_time = time;
+		return;
+	}
+	prev_time = time - prev_time;
+	unsigned char msg[3];
+	msg[0] = MAKEULTRASONIC(get_radar_deg());
+	msg[1] = ((unsigned char *) &prev_time)[0];
+	msg[2] = ((unsigned char *) &prev_time)[1];
+	prev_time = 0;
+	add_msg_tx_queue(msg, 3);
+}
+
 void delayms(unsigned int t)
 {
 	volatile unsigned int i,j;
@@ -83,9 +118,10 @@ void write_flash(char *buf, char sz)
 
 void enable_t0timer(unsigned char d)
 {
+	TA0CCR0 = (((d << 3) + (d << 1)) << 3);
+	TA0R = 0;
 	Timer0Ctl |= TAIE;
 	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
-	TA0CCR0 = (((d << 3) + (d << 1)) << 3);
 }
 
 void disable_t0timer(void)
@@ -139,6 +175,7 @@ int file_3_handler();
 
 extern unsigned char telem_deg;
 extern unsigned char file_size;
+extern unsigned char telem_deg;
 // USCI A0/B0 Receive ISR
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=USCIAB0RX_VECTOR
@@ -206,7 +243,6 @@ void USCI0RX_ISR (void)
 		case 1:
 			// enter telemeter state
 			telem_deg = MSGDATA(rec);
-			telem_deg = (telem_deg << 1) + telem_deg;
 			state = telemeter_s;
 			wakeup = 1;
 			break;
@@ -354,7 +390,9 @@ void TIMER1_A1_ISR (void)
 	switch(__even_in_range(TA1IV,0x0A))
 	{
 		case TA1IV_NONE: break;               // Vector  0:  No interrupt
-		case TA1IV_TACCR1: break;             // Vector  2:  TACCR1 CCIFG
+		case TA1IV_TACCR1:                    // Vector  2:  TACCR1 CCIFG
+		    handle_ultrasonic(TA1CCR1);
+			break;
 		case TA1IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
 		case TA1IV_6: break;                  // Vector  6:  Reserved CCIFG
 		case TA1IV_8: break;                  // Vector  8:  Reserved CCIFG
@@ -377,5 +415,18 @@ void ADC10_ISR (void)
 	int a3 = adc10_samples[0] + adc10_samples[4] + adc10_samples[8] + adc10_samples[12];
 	int a0 = adc10_samples[3] + adc10_samples[7] + adc10_samples[11] + adc10_samples[15];
 	ADC10_handler();
+	switch(state)
+	{
+		case idle: break;
+		case telemeter_s: break;
+		case file_rec_s: break;
+		case sonic_d: break;
+		case ldr_d: break;
+		case dual_d: break;
+		case file_1: break;
+		case file_2: break;
+		case file_3: break;
+		default: break;
+	}
 }
 

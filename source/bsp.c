@@ -19,8 +19,8 @@ void GPIOconfig(void)
 	P1SEL |= BIT1 + BIT2;                     // RX and TX
 	P1SEL2 |= BIT1 + BIT2;
 
-	// P2SEL |= 0x10;                         // BUZZER
-	// P2DIR |= 0x10;
+	UltrasonicDir |= UltrasonicPin;          // UltraSonic Trigger Pin
+	UltrasonicSel &= ~UltrasonicPin;
 
 
 	// LEDs 8-bit Array Port configuration

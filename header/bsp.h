@@ -51,15 +51,22 @@
 //Timer A1 abstraction
 #define Timer1Ctl          TA1CTL
 
-#define Timer1Cmp_Servo    TA1CCTL0
+#define Timer1Cmp_Servo    TA1CCTL2
 #define Timer1Cap_Ultra    TA1CCTL1
-#define Timer1Cmp_Ultra    TA1CCTL2
+#define Timer1Cmp_Ultra    TA1CCTL0
 #define TA1COMPARE0        TA1CCR0
 #define TA1COMPARE1        TA1CCR2
 
 // ADC10 abstraction
 #define ADCLDRCtl0        ADC10CTL0
 #define ADCLDRCtl1        ADC10CTL1
+
+// Ultrasonic sensor
+#define UltrasonicPort     P2OUT
+#define UltrasonicSel      P2SEL
+#define UltrasonicDir      P2DIR
+#define UltrasonicPin      0x01;
+
 
 extern void GPIOconfig(void);
 extern void TIMERconfig(void);

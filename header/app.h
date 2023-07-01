@@ -9,5 +9,6 @@ enum SYSmode{mode0,mode1,mode2,mode3,mode4}; // global variable
 #define MAKEACK(opcode) (0xc0 | (opcode))
 #define MSGID(msg) (((msg) & 0xc0) >> 6)
 #define MSGDATA(msg) ((msg) & 0x3f)
+#define MAKEULTRASONIC(degree) (0x40 | (degree))
 
 #endif
