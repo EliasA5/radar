@@ -152,6 +152,7 @@ rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack})
   gen_server:cast(Data#data.operator_port, {ack, Ack}),
   {next_state, idle, Data};
 rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
+  % what should we do here?
   gen_server:cast(Data#data.operator_port, {wrong_ack, _Ack1, _Ack2}),
   {next_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, Msg, Data) ->
