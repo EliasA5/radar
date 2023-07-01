@@ -10,6 +10,7 @@ void sysConfig(void)
 	lcd_init();
 #endif
 	USCIconfig();
+	// we enable interrupts on idle state enter.
 	// enable_interrupts();
 
 }
@@ -31,7 +32,7 @@ void set_radar_deg(int degree)
 	// TODO set degree value
 }
 
-void delayms(unsigned int t) // t[msec]
+void delayms(unsigned int t)
 {
 	volatile unsigned int i,j;
 
@@ -39,7 +40,7 @@ void delayms(unsigned int t) // t[msec]
 		delay(1000);
 }
 
-void delay(unsigned int t)  // t[msec]
+void delay(unsigned int t)
 {
 	volatile unsigned int i;
 
@@ -55,16 +56,25 @@ void write_flash(char *buf, char sz)
 
 void enterLPM(unsigned char LPM_level)
 {
-	if (LPM_level == 0x00)
-		_BIS_SR(LPM0_bits); /* Enter Low Power Mode 0 */
-	else if (LPM_level == 0x01)
-		_BIS_SR(LPM1_bits); /* Enter Low Power Mode 1 */
-	else if (LPM_level == 0x02)
-		_BIS_SR(LPM2_bits); /* Enter Low Power Mode 2 */
-	else if (LPM_level == 0x03)
-		_BIS_SR(LPM3_bits); /* Enter Low Power Mode 3 */
-	else if (LPM_level == 0x04)
-		_BIS_SR(LPM4_bits); /* Enter Low Power Mode 4 */
+
+	switch (LPM_level){
+		case 0x00:
+			_BIS_SR(LPM0_bits);
+			break;
+		case 0x01:
+			_BIS_SR(LPM1_bits);
+			break;
+		case 0x02:
+			_BIS_SR(LPM2_bits);
+			break;
+		case 0x03:
+			_BIS_SR(LPM3_bits);
+			break;
+		case 0x04:
+			_BIS_SR(LPM4_bits);
+			break;
+		default: break;
+	}
 }
 
 void enable_interrupts()
@@ -266,12 +276,12 @@ void TIMER0_A1_ISR (void)
 {
 	switch(__even_in_range(TA0IV,0x0A))
 	{
-	  case TA0IV_NONE: break;               // Vector  0:  No interrupt
-	  case TA0IV_TACCR1: break;             // Vector  2:  TACCR1 CCIFG
-	  case TA0IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
-	  case TA0IV_6: break;                  // Vector  6:  Reserved CCIFG
-	  case TA0IV_8: break;                  // Vector  8:  Reserved CCIFG
-	  case TA0IV_TAIFG:                     // Vector 10:  TAIFG
+		case TA0IV_NONE: break;               // Vector  0:  No interrupt
+		case TA0IV_TACCR1: break;             // Vector  2:  TACCR1 CCIFG
+		case TA0IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
+		case TA0IV_6: break;                  // Vector  6:  Reserved CCIFG
+		case TA0IV_8: break;                  // Vector  8:  Reserved CCIFG
+		case TA0IV_TAIFG:                     // Vector 10:  TAIFG
 			switch(state)
 			{
 				case idle: break;
@@ -284,7 +294,7 @@ void TIMER0_A1_ISR (void)
 				case file_2: break;
 				case file_3: break;
 			}
-	  break;
+			break;
 	  default: break;
 	}
 }
@@ -300,16 +310,16 @@ void TIMER1_A1_ISR (void)
 #error Compiler not supported!
 #endif
 {
-    switch(__even_in_range(TA1IV,0x0A))
-  {
-      case  TA1IV_NONE: break;              // Vector  0:  No interrupt
-      case  TA1IV_TACCR1: break;            // Vector  2:  TACCR1 CCIFG
-      case TA1IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
-      case TA1IV_6: break;                  // Vector  6:  Reserved CCIFG
-      case TA1IV_8: break;                  // Vector  8:  Reserved CCIFG
-      case TA1IV_TAIFG: break;              // Vector 10:  TAIFG
-      default: 	break;
-  }
+	switch(__even_in_range(TA1IV,0x0A))
+	{
+		case TA1IV_NONE: break;               // Vector  0:  No interrupt
+		case TA1IV_TACCR1: break;             // Vector  2:  TACCR1 CCIFG
+		case TA1IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
+		case TA1IV_6: break;                  // Vector  6:  Reserved CCIFG
+		case TA1IV_8: break;                  // Vector  8:  Reserved CCIFG
+		case TA1IV_TAIFG: break;              // Vector 10:  TAIFG
+		default: break;
+	}
 }
 
 void ADC10_handler(void);
