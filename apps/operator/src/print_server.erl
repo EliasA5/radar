@@ -24,7 +24,8 @@
 -export([
          send_telemeter/1,
          send_file/0,
-         send_to_com/2
+         send_to_com/2,
+         get_comm/0
         ]).
 %%%===================================================================
 %%% API
@@ -36,11 +37,14 @@ send_telemeter(Angle) when is_integer(Angle) ->
 send_file() ->
   SampleFile = <<16#010A:16, 16#041E:16, 16#0214:16, 16#05:8,
                  16#0623:16, 16#0114:16, 16#07143C:24, 16#08:8>>,
+  %% SampleFile = <<16#08:8,16#08:8>>,
   send_to_com(file, SampleFile).
 
 send_to_com(Opcode, OpcodeData) ->
   gen_statem:call(?SERVER, {send, Opcode, OpcodeData}).
 
+get_comm() ->
+  gen_statem:call(?SERVER, get_comm).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,6 +94,8 @@ init([]) ->
 	  {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
 	  {stop, Reason :: term(), NewState :: term()}.
 
+handle_call(get_comm, _From, State) ->
+  {reply, State#state.pid, State};
 handle_call(Msg = {send, Opcode, _OpcodeData}, _From, State) ->
     gen_statem:cast(State#state.pid, Msg),
     {reply, Opcode, State};
