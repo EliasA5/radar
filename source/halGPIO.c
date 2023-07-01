@@ -27,9 +27,11 @@ void set_pwm_speed(unsigned int s)
 	TA1COMPARE1 = s >> 1;
 }
 
+// deg in [0,180]
 void set_radar_deg(int degree)
 {
-	// TODO set degree value
+	TA1COMPARE0 = 26250;
+	TA1COMPARE1 = (25620 - ((degree << 3) + (degree << 1) + degree));
 }
 
 void delayms(unsigned int t)
