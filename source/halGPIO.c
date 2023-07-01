@@ -119,7 +119,7 @@ void USCI0RX_ISR (void)
 	// }
 
 	if(state == file_rec_s){
-		if(file_rec_s_handler(MSGDATA(rec)) == 0){
+		if(file_rec_s_handler(rec) == 0){
 			state = idle;
 			wakeup = 1;
 		}
