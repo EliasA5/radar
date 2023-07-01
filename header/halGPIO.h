@@ -11,7 +11,11 @@ extern void sysConfig(void);
 
 extern inline void set_timer_interrupt(unsigned int t);
 extern void set_pwm_speed(unsigned int s);
-extern void set_radar_deg(int degree);
+extern void set_radar_deg(unsigned char degree);
+extern unsigned char get_radar_deg(void);
+
+extern void activate_ldr(void);
+extern void deactivate_ldr(void);
 
 extern void delay(unsigned int);
 extern void delayms(unsigned int);

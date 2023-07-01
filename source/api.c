@@ -105,6 +105,8 @@ ret:
 	return 0;
 }
 
+int adc10_samples[16] = {0};
+
 unsigned int telem_deg = 0;
 void telemeter_s_enter()
 {
@@ -162,24 +164,15 @@ int sonic_d_handler()
 	return 0;
 }
 
-static int adc10_samples[4] = {0};
 void ldr_d_enter()
 {
-	ADC10DTC1 = 4; // number of transfers
-	ADC10SA  =    adc10_samples;
-	ADCLDRCtl0 |= (ENC + ADC10ON + ADC10IE);
-	ADCLDRCtl0 &= ~ADC10IFG;
-	ADCLDRCtl0 |= ADC10SC;
+	activate_ldr();
 	add_ack_tx_queue(MAKEACK(ldr_d));
 }
 
 void ldr_d_leave()
 {
-	ADC10DTC1 = 0;
-	ADC10SA = 0;
-	ADCLDRCtl0 &= ~ADC10IFG;
-	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
-
+	deactivate_ldr();
 }
 
 int ldr_d_handler()

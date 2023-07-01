@@ -28,10 +28,35 @@ void set_pwm_speed(unsigned int s)
 }
 
 // deg in [0,180]
-void set_radar_deg(int degree)
+static unsigned char current_radar_deg = 0;
+void set_radar_deg(unsigned char degree)
 {
+	current_radar_deg = degree;
 	TA1COMPARE0 = 26250;
 	TA1COMPARE1 = (25620 - ((degree << 3) + (degree << 1) + degree));
+}
+
+unsigned char get_radar_deg(void)
+{
+	return current_radar_deg;
+}
+
+extern int adc10_samples[16];
+void activate_ldr(void)
+{
+	ADC10DTC1 = 16; // number of transfers
+	ADC10SA  =    adc10_samples;
+	ADCLDRCtl0 |= (ENC + ADC10ON + ADC10IE);
+	ADCLDRCtl0 &= ~ADC10IFG;
+	// ADCLDRCtl0 |= ADC10SC;
+}
+
+void deactivate_ldr(void)
+{
+	ADC10DTC1 = 0;
+	ADC10SA = 0;
+	ADCLDRCtl0 &= ~ADC10IFG;
+	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
 }
 
 void delayms(unsigned int t)
@@ -335,6 +360,8 @@ void ADC10_ISR (void)
 #error Compiler not supported!
 #endif
 {
+	int a3 = adc10_samples[0] + adc10_samples[4] + adc10_samples[8] + adc10_samples[12];
+	int a0 = adc10_samples[3] + adc10_samples[7] + adc10_samples[11] + adc10_samples[15];
 	ADC10_handler();
 }
 
