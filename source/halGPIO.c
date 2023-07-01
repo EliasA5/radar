@@ -60,13 +60,16 @@ void deactivate_ldr(void)
 	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
 }
 
+static unsigned int ultrasonic_prev_time = 0;
 void enable_ultrasonic(void)
 {
+	ultrasonic_prev_time = 0;
 	Timer1Cap_Ultra = CM_3 + CAP + CCIE + CCIS_1; //capture mode CCIA1
 	Timer1Ctl |= TAIE;
 }
 void disable_ultrasonic(void)
 {
+	ultrasonic_prev_time = 0;
 	Timer1Ctl &= ~TAIE;
 	Timer1Cap_Ultra = 0;
 }
@@ -80,17 +83,16 @@ void trigger_ultrasonic(void)
 
 void handle_ultrasonic(unsigned int time)
 {
-	static unsigned int prev_time = 0;
-	if(prev_time == 0){
-		prev_time = time;
+	if(ultrasonic_prev_time == 0){
+		ultrasonic_prev_time = time;
 		return;
 	}
-	prev_time = time - prev_time;
+	ultrasonic_prev_time = time - ultrasonic_prev_time;
 	unsigned char msg[3];
 	msg[0] = MAKEULTRASONIC(get_radar_deg());
-	msg[1] = ((unsigned char *) &prev_time)[0];
-	msg[2] = ((unsigned char *) &prev_time)[1];
-	prev_time = 0;
+	msg[1] = ((unsigned char *) &ultrasonic_prev_time)[0];
+	msg[2] = ((unsigned char *) &ultrasonic_prev_time)[1];
+	ultrasonic_prev_time = 0;
 	add_msg_tx_queue(msg, 3);
 }
 
