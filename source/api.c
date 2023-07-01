@@ -54,7 +54,7 @@ char *print_qformat_2_8(unsigned int x)
 unsigned int telem_deg = 0;
 void telemeter_s_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(telemeter_s));
 }
 
 void telemeter_s_leave()
@@ -68,27 +68,33 @@ int telemeter_s_handler()
 	return 0;
 }
 
-char file_buf[60] = {0};
-char file_buf_idx = 0;
+unsigned char file_buf[60] = {0};
+unsigned char file_buf_idx = 0;
+unsigned char file_size = 0;
 void file_rec_s_enter()
 {
-
+	file_buf_idx = 0;
+	add_ack_tx_queue(MAKEACK(file_rec_s));
 }
 
 void file_rec_s_leave()
 {
-
+	// write_flash(file_buf, file_size);
+	add_ack_tx_queue(MAKEACK(file_rec_s));
 }
 
-int file_rec_s_handler()
+int file_rec_s_handler(unsigned char next)
 {
-
-	return 0;
+	file_buf[file_buf_idx] = next;
+	if((++file_buf_idx) >= file_size)
+		return 0;
+	add_ack_tx_queue(MAKEACK(file_rec_s));
+	return 1;
 }
 
 void sonic_d_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(sonic_d));
 }
 
 void sonic_d_leave()
@@ -104,7 +110,7 @@ int sonic_d_handler()
 
 void ldr_d_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(ldr_d));
 }
 
 void ldr_d_leave()
@@ -120,7 +126,7 @@ int ldr_d_handler()
 
 void dual_d_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(dual_d));
 }
 
 void dual_d_leave()
@@ -141,7 +147,7 @@ void ADC10_handler()
 
 void file_1_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(file_1));
 }
 
 void file_1_leave()
@@ -157,7 +163,7 @@ int file_1_handler()
 
 void file_2_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(file_2));
 }
 
 void file_2_leave()
@@ -173,7 +179,7 @@ int file_2_handler()
 
 void file_3_enter()
 {
-
+	add_ack_tx_queue(MAKEACK(file_3));
 }
 
 void file_3_leave()

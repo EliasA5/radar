@@ -14,7 +14,7 @@ extern int telemeter_s_handler();
 extern void telemeter_s_leave();
 
 extern void file_rec_s_enter();
-extern int file_rec_s_handler();
+extern int file_rec_s_handler(unsigned char next);
 extern void file_rec_s_leave();
 
 extern void sonic_d_enter();

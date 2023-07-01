@@ -10,7 +10,8 @@ void sysConfig(void)
 	lcd_init();
 #endif
 	USCIconfig();
-	enable_interrupts();
+	// enable_interrupts();
+
 }
 
 // t units of 10 ms
@@ -77,7 +78,7 @@ inline void disable_interrupts()
 }
 
 int telemeter_s_handler();
-int file_rec_s_handler();
+int file_rec_s_handler(unsigned char next);
 int sonic_d_handler();
 int ldr_d_handler();
 int dual_d_handler();
@@ -85,9 +86,8 @@ int file_1_handler();
 int file_2_handler();
 int file_3_handler();
 
-extern char *file_buf;
-extern char file_buf_idx;
 extern unsigned char telem_deg;
+extern unsigned char file_size;
 // USCI A0/B0 Receive ISR
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=USCIAB0RX_VECTOR
@@ -101,19 +101,18 @@ void USCI0RX_ISR (void)
 	unsigned int wakeup = 0;
 	unsigned int err = 0;
 	unsigned char rec = UCA0RXBUF;
-	static unsigned int file_size = 0;
 
-	if(file_size){
-		file_buf[file_buf_idx] = rec;
-		file_buf_idx++;
-		if(file_buf_idx != file_size)
-			return;
-		file_buf[file_buf_idx] = 0;
-		// write to flash on file_rec_s leave
-		// write_flash(file_buf, file_size);
-		file_size = 0;
-		state = idle;
-		wakeup = 1;
+	// for now we assume no errors
+	// if(UCA0STAT & UCRXERR){
+	// 	add_ack_tx_queue(MAKEACK(61));
+	// 	return;
+	// }
+
+	if(state == file_rec_s){
+		if(file_rec_s_handler(MSGDATA(rec)) == 0){
+			state = idle;
+			wakeup = 1;
+		}
 		goto wakeup;
 	}
 
@@ -150,7 +149,6 @@ void USCI0RX_ISR (void)
 					wakeup = 1;
 					break;
 				default:
-					err = 2;
 					break;
 			}
 			break;
@@ -164,20 +162,18 @@ void USCI0RX_ISR (void)
 		case 2:
 			// send ack at the end of rec_file_s enter
 			file_size = MSGDATA(rec);
-			file_buf_idx = 0;
 			state = file_rec_s;
 			wakeup = 1;
-			goto wakeup;
 			break;
 		default:
 			break;
 	}
 
 // maybe put reply at end of state enter
-reply:
-	// TODO add ack maker function
-	while((IFG2 & UCA0TXIFG) == 0);
-	UCA0TXBUF = err;
+// reply:
+// 	// TODO add ack maker function
+// 	while((IFG2 & UCA0TXIFG) == 0);
+// 	UCA0TXBUF = err;
 
 wakeup:
 	if(wakeup == 0)
@@ -209,17 +205,15 @@ wakeup:
 
 }
 
-char tx_buf[32];
-char tx_head = 0;
-char tx_tail = 0;
-char tx_is_empty = 1;
+unsigned char tx_buf[32];
+unsigned char tx_head = 0;
+unsigned char tx_tail = 0;
+unsigned char tx_left = 32;
 
-void add_msg_tx_queue(char *buf, char len);
-
-void add_ack_tx_queue(char opcode)
+void add_ack_tx_queue(unsigned char opcode)
 {
-	char empty = (tx_tail - tx_head) & 0x1f;
-	if(!tx_is_empty && empty == 0){
+
+	if(tx_left == 0){
 		// busy wait until we can send 1 byte
 		while((IFG2 & UCA0TXIFG) == 0);
 		USCI0TX_ISR();
@@ -228,15 +222,15 @@ void add_ack_tx_queue(char opcode)
 	add_msg_tx_queue(&opcode, 1);
 }
 
-void add_msg_tx_queue(char *buf, char len)
+void add_msg_tx_queue(unsigned char *buf, unsigned char len)
 {
-	char empty = (tx_tail - tx_head) & 0x1f;
 	unsigned char i;
-	if(!tx_is_empty && len > empty)
+	if(len > tx_left)
 		return;
-	for(i = 0; i < len; i--, tx_head = (tx_head + 1) & 0x1f)
+	for(i = 0; i < len; i++, tx_head = (tx_head + 1) & 0x1f)
 		tx_buf[tx_head] = buf[i];
-	tx_is_empty = 0;
+
+	tx_left -= len;
 	IE2 |= UCA0TXIE;
 }
 
@@ -253,10 +247,10 @@ void USCI0TX_ISR (void)
 {
 	UCA0TXBUF = tx_buf[tx_tail];
 	tx_tail = (tx_tail + 1) & 0x1f;
-	if(tx_tail == tx_head){
-		tx_is_empty = 1;
+
+	if((++tx_left) == 32)
 		IE2 &= ~UCA0TXIE;
-	}
+
 }
 
 
@@ -331,3 +325,4 @@ void ADC10_ISR (void)
 {
 	ADC10_handler();
 }
+

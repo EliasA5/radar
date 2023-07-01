@@ -24,6 +24,8 @@ extern void send_char(char ch);
 
 extern void write_flash(char *buf, char sz);
 
+void add_ack_tx_queue(unsigned char opcode);
+void add_msg_tx_queue(unsigned char *buf, unsigned char len);
 
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector=PORT1_VECTOR
