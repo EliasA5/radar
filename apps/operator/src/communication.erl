@@ -108,19 +108,20 @@ idle(info, {data, <<?MSPPC_ULTRASONIC:2, Degree:6>>}, Data) ->
 % ldr
 idle(info, {data, <<?MSPPC_LDR:2, Degree:6>>}, Data) ->
   {next_state, rec, Data#data{rec_type = ldr, rec_amount = 1, rec_buf = <<Degree:8>>}, ?TIMEOUT_TIME};
-idle(info, {data, Byte}, _Data) ->
-  io:format("got unexpected data from msp430: ~w~n", [Byte]),
+idle(info, {data, Byte = <<Two:2, Arg:6>>}, _Data) ->
+  io:format("got unexpected data from msp430: ~w = <<~w:2,~w:6>>~n", [Byte, Two, Arg]),
   keep_state_and_data;
 % commands to send
 idle(cast, {send, telemeter, Angle}, Data) ->
   Msg = Data#data.serial_port ! {send, <<?PCMSP_TELEMETER:2, (Angle div 3):6>>},
   {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_TELEMETER, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(cast, {send, file, File}, Data) ->
-  Msg = Data#data.serial_port ! {send, <<?PCMSP_FILE:2, (byte_size(File)):6>>},
-  {new_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, msg_ack = Msg, postpones = 0, file = File}, {state_timeout, ?TIMEOUT_TIME, Data}};
+  FileSize = byte_size(File),
+  Msg = Data#data.serial_port ! {send, <<?PCMSP_FILE:2, FileSize:6>>},
+  {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, msg_ack = Msg, postpones = 0, file = File, rec_amount = FileSize}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(cast, {send, Opcode, _OpData}, Data) ->
   Msg = Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
-  {new_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+  {next_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(info, {'EXIT', _PID, _Reason}, _Data) ->
   {stop, _Reason}.
 
@@ -133,25 +134,33 @@ idle(info, {'EXIT', _PID, _Reason}, _Data) ->
 		 Data :: term()) ->
 	  gen_statem:event_handler_result(atom()).
 
-rec_ack(info, _Msg, Data = #data{postpones = Postpones}) when Postpones =/= 0 ->
-  {new_state, rec_ack, Data#data{postpones = Postpones-1}, postpone};
+rec_ack(info, {data, _Byte}, Data = #data{postpones = Postpones}) when Postpones =/= 0 ->
+  {next_state, rec_ack, Data#data{postpones = Postpones-1}, postpone};
 rec_ack(info, {data, <<?MSPPC_ULTRASONIC:2, _Ack:6>>}, Data) ->
-  {new_state, rec_ack, Data#data{postpones = 2}, postpone};
+  {next_state, rec_ack, Data#data{postpones = 2}, postpone};
 rec_ack(info, {data, <<?MSPPC_LDR:2, _Ack:6>>}, Data) ->
-  {new_state, rec_ack, Data#data{postpones = 1}, postpone};
-rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) when Ack =:= ?PCMSP_FILE ->
-  Data#data.serial_port ! {send, Data#data.file},
+  {next_state, rec_ack, Data#data{postpones = 1}, postpone};
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack, rec_amount = 0}) when Ack =:= ?PCMSP_FILE ->
+  gen_server:cast(Data#data.operator_port, {ack, file_recevied}),
+  {next_state, idle, Data};
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{file = <<H:8, Tail/binary>>, expected_ack = Ack, rec_amount = RecAmount}) when Ack =:= ?PCMSP_FILE ->
+  Data#data.serial_port ! {send, <<H:8>>},
+  gen_server:cast(Data#data.operator_port, {ack, ready_to_rec_next, RecAmount}),
   % what type of ack should we expect?
-  {new_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
+  {next_state, rec_ack, Data#data{file = Tail, rec_amount = RecAmount-1}, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) ->
-  {new_state, idle, Data};
+  gen_server:cast(Data#data.operator_port, {ack, Ack}),
+  {next_state, idle, Data};
 rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
-  Data#data.serial_port ! Data#data.msg_ack,
-  {new_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
+  gen_server:cast(Data#data.operator_port, {wrong_ack, _Ack1, _Ack2}),
+  {next_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
+rec_ack(info, Msg, Data) ->
+  gen_server:cast(Data#data.operator_port, {unknown_info, Msg}),
+  keep_state_and_data;
 rec_ack(cast, _Msg, Data) ->
-  {new_state, rec_ack, Data, postpone};
+  {next_state, rec_ack, Data, postpone};
 rec_ack(state_timeout, _Msg, Data) ->
-  {new_state, idle, Data};
+  {next_state, idle, Data};
 rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
   {stop, _Reason}.
 
