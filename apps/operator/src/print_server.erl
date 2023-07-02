@@ -158,7 +158,12 @@ handle_cast(Msg, State) ->
 handle_info({'DOWN', _MonRef, process, Pid, Reason}, State = #state{ports = Ports}) ->
   PortFile = lists:keyfind(Pid, 1, Ports),
   io:format("process ~w, file ~w down, reason ~w~n", [Pid, PortFile, Reason]),
-  {noreply, State#state{ports = lists:keydelete(Pid, 1, Ports)}};
+  case State#state{ports = lists:keydelete(Pid, 1, Ports)} of
+    [] ->
+      {stop, noports};
+    NewState ->
+      {noreply, NewState}
+  end;
 handle_info(_Info, State) ->
     {noreply, State}.
 
