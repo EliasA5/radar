@@ -94,12 +94,14 @@ init([]) ->
     % spawn windows
     MainSizer = wxBoxSizer:new(?wxVERTICAL),
     StatusBar = wxStatusBar:new(Frame),
-    wxStatusBar:setFieldsCount(StatusBar, 4, [{widths, [100, 200, 100, 100]}]),
-    wxStatusBar:setStatusText(StatusBar, "uptime: 0:00", [{number, 0}]),
+    wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [100, 200, 100]}]),
+    wxStatusBar:setStatusText(StatusBar, "Uptime: 0:00", [{number, 0}]),
     wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
     Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
     wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
-
+    Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
+    wxFONTWEIGHT_BOLD),
+    wxStatusBar:setFont(StatusBar, Font),
     ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
 
     ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
@@ -197,7 +199,23 @@ handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}
     {noreply,State};
 
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
+	     State = #state{frame = Frame}) ->
+    {ok, CurrDir} = file:get_cwd(),
+    FileDialog = wxFileDialog:new(Frame,[
+        {message, "Pick a file to send"},
+        {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
+        {defaultDir, CurrDir},
+        {defaultFile, ""}
+        ]),
+    case wxFileDialog:showModal(FileDialog) of
+        ?wxID_OK ->
+            % TODO implement functionality
+            FilePath = wxFileDialog:getPath(FileDialog),
+            io:format("user clicked ~s~n", [FilePath]);
+        ?wxID_CANCEL ->
+            io:format("user canceled~n")
+    end,
+    wxFileDialog:destroy(FileDialog),
     {noreply,State};
 
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
