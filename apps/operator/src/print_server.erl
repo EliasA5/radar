@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -19,13 +19,14 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {pid, mon_ref}).
+-record(state, {ports}).
 
 -export([
          send_telemeter/1,
          send_file/0,
          send_to_com/2,
-         get_comm/0
+         get_comm/0,
+         add_comm/1
         ]).
 %%%===================================================================
 %%% API
@@ -46,6 +47,9 @@ send_to_com(Opcode, OpcodeData) ->
 get_comm() ->
   gen_statem:call(?SERVER, get_comm).
 
+add_comm(PortFile) ->
+  gen_statem:call(?SERVER, {add_comm, PortFile}).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
@@ -57,6 +61,8 @@ get_comm() ->
 	  ignore.
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Args) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, Args, []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -73,10 +79,14 @@ start_link() ->
 	  {ok, State :: term(), hibernate} |
 	  {stop, Reason :: term()} |
 	  ignore.
-init([]) ->
+init(Args) ->
     process_flag(trap_exit, true),
-    {ok, {PID, Mon}} = communication:start_monitor([{operator, ?SERVER}, {port_file, "/dev/ttyACM0"}]),
-    {ok, #state{pid = PID, mon_ref = Mon}}.
+    PortFiles = proplists:get_value(port_file, Args, ["/dev/ttyACM0"]),
+    Ports = lists:map(fun(PortFile) ->
+                  {ok, {Pid, _Mon}} = communication:start_monitor([{operator, ?SERVER}, {port_file, PortFile}]),
+                  {Pid, PortFile}
+              end, PortFiles),
+    {ok, #state{ports = Ports}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -95,10 +105,18 @@ init([]) ->
 	  {stop, Reason :: term(), NewState :: term()}.
 
 handle_call(get_comm, _From, State) ->
-  {reply, State#state.pid, State};
+  Pids = lists:map(fun({Pid, _PortFile}) -> Pid end, State#state.ports),
+  {reply, Pids, State};
 handle_call(Msg = {send, Opcode, _OpcodeData}, _From, State) ->
-    gen_statem:cast(State#state.pid, Msg),
-    {reply, Opcode, State};
+  lists:foreach(fun({Pid, _}) -> gen_statem:cast(Pid, Msg) end, State#state.ports),
+  {reply, Opcode, State};
+handle_call({add_comm, PortFile}, _From, State= #state{ports = Ports}) ->
+  case communication:start_monitor([{operator, ?SERVER}, {port_file, PortFile}]) of
+    {ok, {Port, _Mon}} ->
+      {reply, ok, State#state{ports = [{Port, PortFile} | Ports]}};
+    Err ->
+      {reply, Err, State}
+  end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -114,15 +132,17 @@ handle_call(_Request, _From, State) ->
 	  {noreply, NewState :: term(), Timeout :: timeout()} |
 	  {noreply, NewState :: term(), hibernate} |
 	  {stop, Reason :: term(), NewState :: term()}.
-handle_cast({ultrasonic, Val}, State) ->
-    io:format("ultrasonic ~w~n", [Val]),
-    {noreply, State};
-handle_cast({ldr, Val}, State) ->
-    io:format("ldr ~w~n", [Val]),
-    {noreply, State};
+handle_cast({ultrasonic, Port, Val}, State = #state{ports = Ports}) ->
+  {_, PortFile} = lists:keyfind(Port, 1, Ports),
+  io:format("got ultrasonic ~w, from ~s~n", [Val, PortFile]),
+  {noreply, State};
+handle_cast({ldr, Port, Val}, State = #state{ports = Ports}) ->
+  {_, PortFile} = lists:keyfind(Port, 1, Ports),
+  io:format("got ldr ~w, from ~s~n", [Val, PortFile]),
+  {noreply, State};
 handle_cast(Msg, State) ->
-    io:format("got msg ~w~n", [Msg]),
-    {noreply, State}.
+  io:format("got msg ~w~n", [Msg]),
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -135,9 +155,10 @@ handle_cast(Msg, State) ->
 	  {noreply, NewState :: term(), Timeout :: timeout()} |
 	  {noreply, NewState :: term(), hibernate} |
 	  {stop, Reason :: normal | term(), NewState :: term()}.
-handle_info({'DOWN', _MonRef, process, Pid, Reason}, _State = #state{pid = Pid, mon_ref = _MonRef}) ->
-  io:format("process ~w down, reason ~w~n", [Pid, Reason]),
-  {stop, Reason};
+handle_info({'DOWN', _MonRef, process, Pid, Reason}, State = #state{ports = Ports}) ->
+  PortFile = lists:keyfind(Pid, 1, Ports),
+  io:format("process ~w, file ~w down, reason ~w~n", [Pid, PortFile, Reason]),
+  {noreply, State#state{ports = lists:keydelete(Pid, 1, Ports)}};
 handle_info(_Info, State) ->
     {noreply, State}.
 
