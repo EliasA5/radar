@@ -141,22 +141,22 @@ rec_ack(info, {data, <<?MSPPC_ULTRASONIC:2, _Ack:6>>}, Data) ->
 rec_ack(info, {data, <<?MSPPC_LDR:2, _Ack:6>>}, Data) ->
   {next_state, rec_ack, Data#data{postpones = 1}, postpone};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack, rec_amount = 0}) when Ack =:= ?PCMSP_FILE ->
-  gen_server:cast(Data#data.operator_port, {ack, file_recevied}),
+  gen_server:cast(Data#data.operator_port, {ack, self(), file_recevied}),
   {next_state, idle, Data};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{file = <<H:8, Tail/binary>>, expected_ack = Ack, rec_amount = RecAmount}) when Ack =:= ?PCMSP_FILE ->
   Data#data.serial_port ! {send, <<H:8>>},
-  gen_server:cast(Data#data.operator_port, {ack, ready_to_rec_next, RecAmount}),
+  gen_server:cast(Data#data.operator_port, {ack, self(), ready_to_rec_next, RecAmount}),
   % what type of ack should we expect?
   {next_state, rec_ack, Data#data{file = Tail, rec_amount = RecAmount-1}, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) ->
-  gen_server:cast(Data#data.operator_port, {ack, Ack}),
+  gen_server:cast(Data#data.operator_port, {ack, self(), Ack}),
   {next_state, idle, Data};
 rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
   % what should we do here?
-  gen_server:cast(Data#data.operator_port, {wrong_ack, _Ack1, _Ack2}),
+  gen_server:cast(Data#data.operator_port, {wrong_ack, self(), _Ack1, _Ack2}),
   {next_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, Msg, Data) ->
-  gen_server:cast(Data#data.operator_port, {unknown_info, Msg}),
+  gen_server:cast(Data#data.operator_port, {unknown_info, self(), Msg}),
   keep_state_and_data;
 rec_ack(cast, _Msg, Data) ->
   {next_state, rec_ack, Data, postpone};
@@ -176,8 +176,8 @@ rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
 rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic, rec_amount = 1}) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
-  gen_server:cast(Data#data.operator_port, {ultrasonic, format_ultrasonic(RecBuf)}),
-  {next_state, idle, Data, ?TIMEOUT_TIME};
+  gen_server:cast(Data#data.operator_port, {ultrasonic, self(), format_ultrasonic(RecBuf)}),
+  {next_state, idle, Data};
 rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic}) ->
   %append Byte to rec buffer
   Rec_amount = Data#data.rec_amount-1,
@@ -186,7 +186,7 @@ rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic}) ->
 rec(info, {data, Byte}, Data = #data{rec_type = ldr, rec_amount = 1}) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
-  gen_server:cast(Data#data.operator_port, {ldr, format_ldr(RecBuf)}),
+  gen_server:cast(Data#data.operator_port, {ldr, self(), format_ldr(RecBuf)}),
   {next_state, idle, Data};
 rec(cast, _Msg, Data) ->
   {next_state, rec, Data, [postpone, 5000]};
