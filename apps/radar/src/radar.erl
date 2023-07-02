@@ -219,7 +219,22 @@ handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}
     {noreply,State};
 
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
+	     State = #state{frame = Frame}) ->
+
+
+    SliderDialog = wxDialog:new(Frame, ?wxID_ANY, "Set Radar Angel"),
+    Slider = wxSlider:new(SliderDialog, ?wxID_ANY, 90, 0, 180, [
+        {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
+    ]),
+    wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
+    case wxDialog:showModal(SliderDialog) of
+        ?wxID_OK ->
+            Angle = wxSlider:getValue(Slider),
+            io:format("users selected angle: ~w~n", [Angle]);
+        ?wxID_CANCEL ->
+            io:format("User Canceled~n")
+    end,
+    wxDialog:destroy(SliderDialog),
     {noreply,State};
 
 handle_event(Cmd = #wx{}, State) ->
