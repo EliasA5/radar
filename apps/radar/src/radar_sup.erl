@@ -30,7 +30,7 @@ init([]) ->
                  intensity => 0,
                  period => 1},
     ChildSpecs = [#{id => radar,
-                    start => {radar, start_link}}],
+                    start => {radar, start_link, []}}],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
