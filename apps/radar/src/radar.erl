@@ -63,7 +63,8 @@
                       ignore.
 
 start_link() ->
-  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+  % local or global?
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -100,7 +101,7 @@ init([]) ->
   % spawn windows
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
   StatusBar = wxStatusBar:new(Frame),
-  wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [100, 200, 100]}]),
+  wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [150, 200, 100]}]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: 0:00", [{number, 0}]),
   wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
   Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
@@ -256,9 +257,12 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_cast({advance_uptime}, State) ->
-  io:format("ADVANCEEE!!~n"),
-  {noreply, State};
+handle_cast({advance_uptime}, State = #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime}}) ->
+  {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
+  UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
+  wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
+  UpdatedState = State#state{status_bar_stats = #stats{ uptime = Uptime + 1}},
+  {noreply, UpdatedState};
 handle_cast(_Request, State) ->
   {noreply, State}.
 
