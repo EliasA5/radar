@@ -195,7 +195,57 @@ handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}
   {noreply,State};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             State = #state{frame = Frame, status_bar_stats = Stats}) ->
+  StatsDialog = wxDialog:new(Frame, ?wxID_ANY,"Stats Report", [
+     {style, ?wxDEFAULT_DIALOG_STYLE bor ?wxRESIZE_BORDER}
+    ]),
+  StatsSizer = wxBoxSizer:new(?wxVERTICAL),
+  Buttons = wxDialog:createButtonSizer(StatsDialog, ?wxOK),
+
+  Font = wxFont:new(9, ?wxFONTFAMILY_DEFAULT, ?wxFONTSTYLE_NORMAL, ?
+  wxFONTWEIGHT_BOLD),
+  wxListCtrl:setFont(StatsDialog, Font),
+
+  ListCtrl = wxListCtrl:new(StatsDialog, [
+    {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL bor ?wxLC_VRULES}
+  ]),
+  wxListCtrl:insertColumn(ListCtrl, 0, "Statistic", []),
+  wxListCtrl:setColumnWidth(ListCtrl, 0, 100),
+  wxListCtrl:insertColumn(ListCtrl, 1, "Value", []),
+  wxListCtrl:setColumnWidth(ListCtrl, 1, 100),
+  Fun =
+   fun({Idx, Name, Value}) ->
+      ValStr = integer_to_list(Value),
+      wxListCtrl:insertItem(ListCtrl, Idx, ""),
+      wxListCtrl:setItem(ListCtrl, Idx, 0, atom_to_list(Name)),
+      wxListCtrl:setItem(ListCtrl, Idx, 1, ValStr),
+      case (Idx rem 2) of
+        0 ->
+          ok;
+        1 ->
+          wxListCtrl:setItemBackgroundColour(ListCtrl, Idx, {240,240,240,255})
+      end,
+      ok
+   end,
+  Names = record_info(fields, stats),
+  [_| Values] = tuple_to_list(Stats),
+  wx:foreach(Fun, lists:zip3(lists:seq(0, length(Names) - 1), Names, Values)),
+
+  wxBoxSizer:add(StatsSizer, ListCtrl, [
+    {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+    {border, 5}
+  ]),
+  
+  wxBoxSizer:add(StatsSizer, Buttons, [
+    {flag, ?wxALIGN_CENTER bor ?wxALL},
+    {border, 5}
+  ]),
+  % wxBoxSizer:setMinSize(StatsSizer, 300, 300),
+  wxDialog:setSizer(StatsDialog, StatsSizer),
+  wxSizer:setSizeHints(StatsSizer, StatsDialog),
+
+  wxDialog:show(StatsDialog),
+  % wxDialog:destroy(StatsDialog),
   {noreply,State};
 
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
