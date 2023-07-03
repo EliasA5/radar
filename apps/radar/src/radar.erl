@@ -4,25 +4,25 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created: 18 June 2023
+%%% Created: 03 July 2023
 %%%-------------------------------------------------------------------
 -module(radar).
 
--behaviour(wx_object).
+-behaviour(gen_server).
 
 -include_lib("wx/include/wx.hrl").
 
 %% API
 -export([start_link/0]).
 
-%% wx_object callbacks
+%% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         handle_event/2, terminate/2, code_change/3]).
+         terminate/2, code_change/3, format_status/2]).
 
 %% internal usage
 -export([advance_uptime/0]).
 
--define(WXSERVER, ?MODULE).
+-define(SERVER, ?MODULE).
 
 -record(stats, {
           uptime = 0,
@@ -55,29 +55,31 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
-%%
-%% @spec start_link() -> wxWindow()
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link() -> {ok, Pid :: pid()} |
+                      {error, Error :: {already_started, pid()}} |
+                      {error, Error :: term()} |
+                      ignore.
+
 start_link() ->
-  wx_object:start_link({local, ?WXSERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
-%%% wx_object callbacks
+%%% gen_server callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Initializes the server
-%%
-%% @spec init(Args) -> {wxWindow(), State} |
-%%                     {wxWindow(), State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-%%
+-spec init(Args :: term()) -> {ok, State :: term()} |
+                              {ok, State :: term(), Timeout :: timeout()} |
+                              {ok, State :: term(), hibernate} |
+                              {stop, Reason :: term()} |
+                              ignore.
 %%  ----MainSizer vertical----
 %%    ----Status bar----
 %%    ------Canvas------
@@ -92,6 +94,7 @@ start_link() ->
 %%
 %%
 init([]) ->
+  process_flag(trap_exit, true),
   wx:new(),
   Frame = wxFrame:new(wx:null(), 1 , "Radar"),
   % spawn windows
@@ -155,19 +158,19 @@ init([]) ->
   wxFrame:connect(Frame, command_button_clicked),
   timer:apply_interval(1000, ?MODULE, advance_uptime, []),
   wxFrame:show(Frame),
-  {Frame, #state{frame = Frame, canvas = Canvas, status_bar = StatusBar, status_bar_stats = #stats{}}}.
+  {ok, #state{frame = Frame, canvas = Canvas, status_bar = StatusBar, status_bar_stats = #stats{}}}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handling events
-%%
-%% @spec handle_event(wx{}, State) ->
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
+%% Handling gui events
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(Request :: #wx{}, State :: term()) ->
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {stop, Reason :: term(), NewState :: term()}.
+
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
 
@@ -199,7 +202,7 @@ handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}
   {noreply,State};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{frame = Frame, status_bar_stats = Stats}) ->
+             State = #state{frame = _Frame, status_bar_stats = Stats}) ->
   Env = wx:get_env(),
   spawn(fun() -> stats_dialog(Env, Stats) end),
   {noreply,State};
@@ -224,16 +227,18 @@ handle_event(Cmd = #wx{}, State) ->
 %% @private
 %% @doc
 %% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(Request :: term(), From :: {pid(), term()}, State :: term()) ->
+  {reply, Reply :: term(), NewState :: term()} |
+  {reply, Reply :: term(), NewState :: term(), Timeout :: timeout()} |
+  {reply, Reply :: term(), NewState :: term(), hibernate} |
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
+  {stop, Reason :: term(), NewState :: term()}.
+
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
   Reply = ok,
@@ -243,45 +248,49 @@ handle_call(_Request, _From, State) ->
 %% @private
 %% @doc
 %% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(Request :: term(), State :: term()) ->
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {stop, Reason :: term(), NewState :: term()}.
 
 handle_cast({advance_uptime}, State) ->
   io:format("ADVANCEEE!!~n"),
   {noreply, State};
-handle_cast(_Msg, State) ->
+handle_cast(_Request, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({new_frame}, State) ->
-  {noreply, State};
+-spec handle_info(Info :: timeout() | term() | #wx{}, State :: term()) ->
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {stop, Reason :: normal | term(), NewState :: term()}.
+
+handle_info(WxEvent = #wx{}, State) ->
+  handle_event(WxEvent, State);
 handle_info(_Info, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function is called by a wx_object when it is about to
+%% This function is called by a gen_server when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the wx_object terminates
+%% necessary cleaning up. When it returns, the gen_server terminates
 %% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
+                State :: term()) -> any().
+
 terminate(_Reason, State) ->
   radar_app:stop(State),
   ok.
@@ -290,12 +299,29 @@ terminate(_Reason, State) ->
 %% @private
 %% @doc
 %% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(OldVsn :: term() | {down, term()},
+                  State :: term(),
+                  Extra :: term()) -> {ok, NewState :: term()} |
+                                      {error, Reason :: term()}.
+
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called for changing the form and appearance
+%% of gen_server status when it is returned from sys:get_status/1,2
+%% or when it appears in termination error logs.
+%% @end
+%%--------------------------------------------------------------------
+-spec format_status(Opt :: normal | terminate,
+                    Status :: list()) -> Status :: term().
+
+format_status(_Opt, Status) ->
+  Status.
 
 %%%===================================================================
 %%% Internal functions
@@ -406,11 +432,6 @@ stats_dialog(Env, Stats) ->
  wxDialog:showModal(StatsDialog),
  wxDialog:destroy(StatsDialog).
 
-schedule_frames() ->
-  timer:send_interval(40, ?WXSERVER, {new_frame}).
-
-
 advance_uptime() ->
-  wx_object:cast(?WXSERVER, {advance_uptime}).
-
+  gen_server:cast(?SERVER, {advance_uptime}).
 

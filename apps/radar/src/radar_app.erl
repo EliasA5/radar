@@ -10,8 +10,7 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    {_,_,_,PID} = radar:start_link(),
-    {ok, PID}.
+    radar:start_link().
 
 stop(_State) ->
     wx:destroy(),
