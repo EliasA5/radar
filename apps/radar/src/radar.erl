@@ -63,8 +63,7 @@
                       ignore.
 
 start_link() ->
-  % local or global?
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -102,7 +101,7 @@ init([]) ->
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
   StatusBar = wxStatusBar:new(Frame),
   wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [150, 200, 100]}]),
-  wxStatusBar:setStatusText(StatusBar, "Uptime: 0:00", [{number, 0}]),
+  wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
   wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
   Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
@@ -437,5 +436,5 @@ stats_dialog(Env, Stats) ->
  wxDialog:destroy(StatsDialog).
 
 advance_uptime() ->
-  gen_server:cast(?SERVER, {advance_uptime}).
+  gen_server:cast({global, ?SERVER}, {advance_uptime}).
 
