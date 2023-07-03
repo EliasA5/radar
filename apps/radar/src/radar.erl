@@ -221,15 +221,31 @@ handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
 	     State = #state{frame = Frame}) ->
 
+    SliderDialog = wxDialog:new(Frame, ?wxID_ANY, "Set Radar Angle", [
+        {style, ?wxDEFAULT_DIALOG_STYLE}
+    ]),
+    DialogSizer = wxBoxSizer:new(?wxVERTICAL),
 
-    SliderDialog = wxDialog:new(Frame, ?wxID_ANY, "Set Radar Angel"),
+    Buttons = wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
     Slider = wxSlider:new(SliderDialog, ?wxID_ANY, 90, 0, 180, [
         {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
+     ]),
+    wxSizer:add(DialogSizer, Slider, [
+        {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+        {border, 5}
     ]),
-    wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
+    wxSizer:add(DialogSizer, Buttons, [
+        {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+        {border, 5}
+    ]),
+
+    wxDialog:setSizer(SliderDialog, DialogSizer),
+    wxSizer:setSizeHints(DialogSizer, SliderDialog),
+
     case wxDialog:showModal(SliderDialog) of
         ?wxID_OK ->
             Angle = wxSlider:getValue(Slider),
+            % TODO add callback
             io:format("users selected angle: ~w~n", [Angle]);
         ?wxID_CANCEL ->
             io:format("User Canceled~n")
