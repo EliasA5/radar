@@ -17,23 +17,23 @@
 
 %% wx_object callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 handle_event/2, terminate/2, code_change/3]).
+         handle_event/2, terminate/2, code_change/3]).
 
 -define(WXSERVER, ?MODULE).
 
 -record(stats, {
-    uptime = 0,
-    rec_msg = 0,
-    num_nodes = 0,
-    num_radars = 0
+          uptime = 0,
+          rec_msg = 0,
+          num_nodes = 0,
+          num_radars = 0
 }).
 
 -record(state, {
-    frame,
-    canvas,
-    status_bar,
-    status_bar_stats
-    }).
+          frame,
+          canvas,
+          status_bar,
+          status_bar_stats
+}).
 
 -define(SUS_BUTTON, 100).
 -define(SLDR_BUTTON, 101).
@@ -57,7 +57,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    wx_object:start_link({global, ?WXSERVER}, ?MODULE, [], []).
+  wx_object:start_link({global, ?WXSERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% wx_object callbacks
@@ -89,69 +89,69 @@ start_link() ->
 %%
 %%
 init([]) ->
-    wx:new(),
-    Frame = wxFrame:new(wx:null(), 1 , "Radar"),
-    % spawn windows
-    MainSizer = wxBoxSizer:new(?wxVERTICAL),
-    StatusBar = wxStatusBar:new(Frame),
-    wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [100, 200, 100]}]),
-    wxStatusBar:setStatusText(StatusBar, "Uptime: 0:00", [{number, 0}]),
-    wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
-    Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
-    wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
-    Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
-    wxFONTWEIGHT_BOLD),
-    wxStatusBar:setFont(StatusBar, Font),
-    ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
+  wx:new(),
+  Frame = wxFrame:new(wx:null(), 1 , "Radar"),
+  % spawn windows
+  MainSizer = wxBoxSizer:new(?wxVERTICAL),
+  StatusBar = wxStatusBar:new(Frame),
+  wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [100, 200, 100]}]),
+  wxStatusBar:setStatusText(StatusBar, "Uptime: 0:00", [{number, 0}]),
+  wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
+  Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
+  wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
+  Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
+                    wxFONTWEIGHT_BOLD),
+  wxStatusBar:setFont(StatusBar, Font),
+  ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
 
-    ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
-    wxGridSizer:add(ButtonGridSizer, ScanUsButton,
-        [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_LEFT}]),
+  ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
+  wxGridSizer:add(ButtonGridSizer, ScanUsButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_LEFT}]),
 
-    ScanLdrButton = wxButton:new(Frame, ?SLDR_BUTTON, [{label, "Scan LDR"}]),
-    wxGridSizer:add(ButtonGridSizer, ScanLdrButton,
-        [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_CENTER_HORIZONTAL}]),
+  ScanLdrButton = wxButton:new(Frame, ?SLDR_BUTTON, [{label, "Scan LDR"}]),
+  wxGridSizer:add(ButtonGridSizer, ScanLdrButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_CENTER_HORIZONTAL}]),
 
-    DualScanButton = wxButton:new(Frame, ?SDUAL_BUTTON, [{label, "Dual Scan"}]),
-    wxGridSizer:add(ButtonGridSizer, DualScanButton,
-        [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT}]),
+  DualScanButton = wxButton:new(Frame, ?SDUAL_BUTTON, [{label, "Dual Scan"}]),
+  wxGridSizer:add(ButtonGridSizer, DualScanButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT}]),
 
-    File1Button = wxButton:new(Frame, ?FILE1_BUTTON, [{label, "Start file 1"}]),
-    wxGridSizer:add(ButtonGridSizer, File1Button,
-        [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_LEFT}]),
+  File1Button = wxButton:new(Frame, ?FILE1_BUTTON, [{label, "Start file 1"}]),
+  wxGridSizer:add(ButtonGridSizer, File1Button,
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_LEFT}]),
 
-    File2Button = wxButton:new(Frame, ?FILE2_BUTTON, [{label, "Start file 2"}]),
-    wxGridSizer:add(ButtonGridSizer, File2Button,
-        [{proportion, 0}, {flag, ?wxALIGN_CENTER}]),
+  File2Button = wxButton:new(Frame, ?FILE2_BUTTON, [{label, "Start file 2"}]),
+  wxGridSizer:add(ButtonGridSizer, File2Button,
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER}]),
 
-    File3Button = wxButton:new(Frame, ?FILE3_BUTTON, [{label, "Start file 3"}]),
-    wxGridSizer:add(ButtonGridSizer, File3Button,
-        [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT}]),
+  File3Button = wxButton:new(Frame, ?FILE3_BUTTON, [{label, "Start file 3"}]),
+  wxGridSizer:add(ButtonGridSizer, File3Button,
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT}]),
 
-    ShowStatsButton = wxButton:new(Frame, ?STATS_BUTTON, [{label, "Show Stats"}]),
-    wxGridSizer:add(ButtonGridSizer, ShowStatsButton,
-        [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_LEFT}]),
+  ShowStatsButton = wxButton:new(Frame, ?STATS_BUTTON, [{label, "Show Stats"}]),
+  wxGridSizer:add(ButtonGridSizer, ShowStatsButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_LEFT}]),
 
-    SendFileButton = wxButton:new(Frame, ?SFILE_BUTTON, [{label, "Send File"}]),
-    wxGridSizer:add(ButtonGridSizer, SendFileButton,
-        [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_CENTER}]),
+  SendFileButton = wxButton:new(Frame, ?SFILE_BUTTON, [{label, "Send File"}]),
+  wxGridSizer:add(ButtonGridSizer, SendFileButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_CENTER}]),
 
-    SendTelemer = wxButton:new(Frame, ?STELEM_BUTTON, [{label, "Scan Angle"}]),
-    wxGridSizer:add(ButtonGridSizer, SendTelemer,
-        [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
+  SendTelemer = wxButton:new(Frame, ?STELEM_BUTTON, [{label, "Scan Angle"}]),
+  wxGridSizer:add(ButtonGridSizer, SendTelemer,
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
 
-    wxBoxSizer:add(MainSizer, StatusBar, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
-    wxBoxSizer:add(MainSizer, Canvas, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
-    wxBoxSizer:add(MainSizer, ButtonGridSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(MainSizer, StatusBar, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(MainSizer, Canvas, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(MainSizer, ButtonGridSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
 
-    wxWindow:setSizer(Frame, MainSizer),
-    wxSizer:setSizeHints(MainSizer, Frame),
+  wxWindow:setSizer(Frame, MainSizer),
+  wxSizer:setSizeHints(MainSizer, Frame),
 
-    % connect windows to events
-    wxFrame:connect(Frame, close_window),
-    wxFrame:connect(Frame, command_button_clicked),
-    wxFrame:show(Frame),
-    {Frame, #state{frame = Frame, canvas = Canvas, status_bar = StatusBar, status_bar_stats = #stats{}}}.
+  % connect windows to events
+  wxFrame:connect(Frame, close_window),
+  wxFrame:connect(Frame, command_button_clicked),
+  wxFrame:show(Frame),
+  {Frame, #state{frame = Frame, canvas = Canvas, status_bar = StatusBar, status_bar_stats = #stats{}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -165,97 +165,97 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_event(#wx{event = #wxClose{}}, State) ->
-    {stop, normal, State};
+  {stop, normal, State};
 
 handle_event(#wx{id=?SUS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
-    % do something with the button
-    io:format("Scan button pressed~n"),
-    {noreply,State};
+             State = #state{}) ->
+  % do something with the button
+  io:format("Scan button pressed~n"),
+  {noreply,State};
 
 handle_event(#wx{id=?SLDR_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
-    {noreply,State};
+             State = #state{}) ->
+  {noreply,State};
 
 handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
-    {noreply,State};
+             State = #state{}) ->
+  {noreply,State};
 
 handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
-    {noreply,State};
+             State = #state{}) ->
+  {noreply,State};
 
 handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
-    {noreply,State};
+             State = #state{}) ->
+  {noreply,State};
 
 handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
+             State = #state{}) ->
 
-    {noreply,State};
+  {noreply,State};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{}) ->
-    {noreply,State};
+             State = #state{}) ->
+  {noreply,State};
 
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{frame = Frame}) ->
-    {ok, CurrDir} = file:get_cwd(),
-    FileDialog = wxFileDialog:new(Frame,[
-        {message, "Pick a file to send"},
-        {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
-        {defaultDir, CurrDir},
-        {defaultFile, ""}
-        ]),
-    case wxFileDialog:showModal(FileDialog) of
-        ?wxID_OK ->
-            % TODO implement functionality
-            FilePath = wxFileDialog:getPath(FileDialog),
-            io:format("user clicked ~s~n", [FilePath]);
-        ?wxID_CANCEL ->
-            io:format("user canceled~n")
-    end,
-    wxFileDialog:destroy(FileDialog),
-    {noreply,State};
+             State = #state{frame = Frame}) ->
+  {ok, CurrDir} = file:get_cwd(),
+  FileDialog = wxFileDialog:new(Frame,[
+    {message, "Pick a file to send"},
+    {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
+    {defaultDir, CurrDir},
+    {defaultFile, ""}
+  ]),
+  case wxFileDialog:showModal(FileDialog) of
+    ?wxID_OK ->
+      % TODO implement functionality
+      FilePath = wxFileDialog:getPath(FileDialog),
+      io:format("user clicked ~s~n", [FilePath]);
+    ?wxID_CANCEL ->
+      io:format("user canceled~n")
+  end,
+  wxFileDialog:destroy(FileDialog),
+  {noreply,State};
 
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{frame = Frame}) ->
+             State = #state{frame = Frame}) ->
 
-    SliderDialog = wxDialog:new(Frame, ?wxID_ANY, "Set Radar Angle", [
-        {style, ?wxDEFAULT_DIALOG_STYLE}
+  SliderDialog = wxDialog:new(Frame, ?wxID_ANY, "Set Radar Angle", [
+     {style, ?wxDEFAULT_DIALOG_STYLE}
     ]),
-    DialogSizer = wxBoxSizer:new(?wxVERTICAL),
+  DialogSizer = wxBoxSizer:new(?wxVERTICAL),
 
-    Buttons = wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
-    Slider = wxSlider:new(SliderDialog, ?wxID_ANY, 90, 0, 180, [
-        {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
-     ]),
-    wxSizer:add(DialogSizer, Slider, [
-        {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-        {border, 5}
-    ]),
-    wxSizer:add(DialogSizer, Buttons, [
-        {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-        {border, 5}
-    ]),
+  Buttons = wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
+  Slider = wxSlider:new(SliderDialog, ?wxID_ANY, 90, 0, 180, [
+     {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
+  ]),
+  wxSizer:add(DialogSizer, Slider, [
+     {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+     {border, 5}
+  ]),
+  wxSizer:add(DialogSizer, Buttons, [
+     {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+     {border, 5}
+  ]),
 
-    wxDialog:setSizer(SliderDialog, DialogSizer),
-    wxSizer:setSizeHints(DialogSizer, SliderDialog),
+  wxDialog:setSizer(SliderDialog, DialogSizer),
+  wxSizer:setSizeHints(DialogSizer, SliderDialog),
 
-    case wxDialog:showModal(SliderDialog) of
-        ?wxID_OK ->
-            Angle = wxSlider:getValue(Slider),
-            % TODO add callback
-            io:format("users selected angle: ~w~n", [Angle]);
-        ?wxID_CANCEL ->
-            io:format("User Canceled~n")
-    end,
-    wxDialog:destroy(SliderDialog),
-    {noreply,State};
+  case wxDialog:showModal(SliderDialog) of
+    ?wxID_OK ->
+      Angle = wxSlider:getValue(Slider),
+      % TODO add callback
+      io:format("users selected angle: ~w~n", [Angle]);
+    ?wxID_CANCEL ->
+      io:format("User Canceled~n")
+  end,
+  wxDialog:destroy(SliderDialog),
+  {noreply,State};
 
 handle_event(Cmd = #wx{}, State) ->
-    io:format("got event: ~w~n", [Cmd]),
-    {noreply, State}.
+  io:format("got event: ~w~n", [Cmd]),
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -272,8 +272,8 @@ handle_event(Cmd = #wx{}, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+  Reply = ok,
+  {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -286,7 +286,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast(_Msg, State) ->
-    {noreply, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -299,9 +299,9 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({new_frame}, State) ->
-    {noreply, State};
+  {noreply, State};
 handle_info(_Info, State) ->
-    {noreply, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -315,8 +315,8 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State) ->
-    radar_app:stop(State),
-    ok.
+  radar_app:stop(State),
+  ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -327,7 +327,7 @@ terminate(_Reason, State) ->
 %% @end
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+  {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
