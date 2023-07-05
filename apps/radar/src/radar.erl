@@ -20,7 +20,7 @@
          terminate/2, code_change/3, format_status/2]).
 
 %% internal usage
--export([advance_uptime/0]).
+-export([]).
 
 -define(SERVER, ?MODULE).
 
@@ -156,7 +156,7 @@ init([]) ->
   % connect windows to events
   wxFrame:connect(Frame, close_window),
   wxFrame:connect(Frame, command_button_clicked),
-  timer:apply_interval(1000, ?MODULE, advance_uptime, []),
+  {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
   wxFrame:show(Frame),
   {ok, #state{frame = Frame, canvas = Canvas, status_bar = StatusBar, status_bar_stats = #stats{}}}.
 
@@ -256,12 +256,6 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_cast({advance_uptime}, State = #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime}}) ->
-  {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
-  UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
-  wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
-  UpdatedState = State#state{status_bar_stats = #stats{ uptime = Uptime + 1}},
-  {noreply, UpdatedState};
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -277,8 +271,16 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
+handle_info({advance_uptime}, State = #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime}}) ->
+  {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
+  UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
+  wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
+  UpdatedState = State#state{status_bar_stats = #stats{ uptime = Uptime + 1}},
+  {noreply, UpdatedState};
+
 handle_info(WxEvent = #wx{}, State) ->
   handle_event(WxEvent, State);
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
@@ -434,7 +436,4 @@ stats_dialog(Env, Stats) ->
 
  wxDialog:showModal(StatsDialog),
  wxDialog:destroy(StatsDialog).
-
-advance_uptime() ->
-  gen_server:cast({global, ?SERVER}, {advance_uptime}).
 
