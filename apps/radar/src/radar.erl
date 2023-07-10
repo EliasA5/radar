@@ -336,7 +336,7 @@ slider_dialog(Env) ->
   wx:set_env(Env),
   SliderDialog = wxDialog:new(wx:null(), ?wxID_ANY, "Set Radar Angle", [
      {style, ?wxDEFAULT_DIALOG_STYLE}
-    ]),
+  ]),
   DialogSizer = wxBoxSizer:new(?wxVERTICAL),
 
   Buttons = wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
@@ -371,7 +371,7 @@ send_file_dialog(Env) ->
   FileDialog = wxFileDialog:new(wx:null(),[
     {message, "Pick a file to send"},
     {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
-    {defaultDir, CurrDir},
+    {defaultDir, "~"},
     {defaultFile, ""}
   ]),
   case wxFileDialog:showModal(FileDialog) of
