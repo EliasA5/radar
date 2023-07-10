@@ -1,4 +1,8 @@
-[{<<"serial">>,
+[{<<"inotify">>,
+  {git,"https://github.com/EliasA5/inotify.git",
+       {ref,"0b8175e45a86a61397e51c263972368a74e3a332"}},
+  0},
+ {<<"serial">>,
   {git,"https://github.com/EliasA5/erlang-serial.git",
-       {ref,"55ed9fd68a2ca859cb86652ef57e721c75b5475e"}},
+       {ref,"7e1e2d246c6fe3581c4931e8d2e391828563a02c"}},
   0}].
