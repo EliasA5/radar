@@ -165,7 +165,7 @@ void sonic_d_leave()
 
 int sonic_d_handler()
 {
-
+	
 	return 0;
 }
 
@@ -207,51 +207,18 @@ void ADC10_handler()
 
 }
 
-void file_1_enter()
+void file_enter()
 {
 	add_ack_tx_queue(MAKEACK(file_1));
 }
 
-void file_1_leave()
+void file_leave()
 {
 
 }
 
-int file_1_handler()
-{
-
-	return 0;
-}
-
-void file_2_enter()
-{
-	add_ack_tx_queue(MAKEACK(file_2));
-}
-
-void file_2_leave()
-{
-
-}
-
-int file_2_handler()
+int file_handler()
 {
 
 	return 0;
 }
-
-void file_3_enter()
-{
-	add_ack_tx_queue(MAKEACK(file_3));
-}
-
-void file_3_leave()
-{
-
-}
-
-int file_3_handler()
-{
-
-	return 0;
-}
-

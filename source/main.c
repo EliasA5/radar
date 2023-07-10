@@ -5,6 +5,7 @@
 
 enum FSMstate state;
 enum SYSmode lpm_mode;
+struct file_manager fmanager = {0};
 
 int main(void) {
 
@@ -54,24 +55,11 @@ int main(void) {
 				dual_d_leave();
 				break;
 
-			case file_1:
-				file_1_enter();
+			case do_file:
+				file_enter();
 				enterLPM(lpm_mode);
-				file_2_leave();
+				file_leave();
 				break;
-
-			case file_2:
-				file_2_enter();
-				enterLPM(lpm_mode);
-				file_2_leave();
-				break;
-
-			case file_3:
-				file_3_enter();
-				enterLPM(lpm_mode);
-				file_3_leave();
-				break;
-
 		}
 	}
 }

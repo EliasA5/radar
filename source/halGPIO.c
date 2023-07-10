@@ -226,16 +226,25 @@ void USCI0RX_ISR (void)
 					state = dual_d;
 					wakeup = 1;
 					break;
+				case file_0:
+					if(state != do_file || fmanager.curr_file != 0)
+						fmanager.file_curr[0] = FILE0PTR;
+					state = do_file;
+					fmanager.curr_file = 0;
+					wakeup = 1;
+					break;
 				case file_1:
-					state = file_1;
+					if(state != do_file || fmanager.curr_file != 1)
+						fmanager.file_curr[1] = FILE1PTR;
+					state = do_file;
+					fmanager.curr_file = 1;
 					wakeup = 1;
 					break;
 				case file_2:
-					state = file_2;
-					wakeup = 1;
-					break;
-				case file_3:
-					state = file_3;
+					if(state != do_file || fmanager.curr_file != 2)
+						fmanager.file_curr[2] = FILE2PTR;
+					state = do_file;
+					fmanager.curr_file = 2;
 					wakeup = 1;
 					break;
 				default:

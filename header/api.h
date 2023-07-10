@@ -29,16 +29,8 @@ extern void dual_d_enter();
 extern int dual_d_handler();
 extern void dual_d_leave();
 
-extern void file_1_enter();
-extern int file_1_handler();
-extern void file_1_leave();
-
-extern void file_2_enter();
-extern int file_2_handler();
-extern void file_2_leave();
-
-extern void file_3_enter();
-extern int file_3_handler();
-extern void file_3_leave();
+extern void file_enter();
+extern int file_handler();
+extern void file_leave();
 
 #endif
