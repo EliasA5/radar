@@ -10,16 +10,22 @@
 
 -behaviour(gen_server).
 
+-define(inotify_msg(Mask, Cookie, Name),
+        {inotify_msg, Mask, Cookie, Name}).
+
 %% API
 -export([start_link/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3, format_status/2]).
+         terminate/2, code_change/3, format_status/2]).
+
+%% inotify event
+-export([inotify_event/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {comm_map, inotify_ref}).
 
 %%%===================================================================
 %%% API
@@ -31,11 +37,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, Pid :: pid()} |
-	  {error, Error :: {already_started, pid()}} |
-	  {error, Error :: term()} |
-	  ignore.
+                      {error, Error :: {already_started, pid()}} |
+                      {error, Error :: term()} |
+                      ignore.
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -48,13 +54,34 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) -> {ok, State :: term()} |
-	  {ok, State :: term(), Timeout :: timeout()} |
-	  {ok, State :: term(), hibernate} |
-	  {stop, Reason :: term()} |
-	  ignore.
+                              {ok, State :: term(), Timeout :: timeout()} |
+                              {ok, State :: term(), hibernate} |
+                              {stop, Reason :: term()} |
+                              ignore.
 init([]) ->
-    process_flag(trap_exit, true),
-    {ok, #state{}}.
+  process_flag(trap_exit, true),
+  case filelib:ensure_dir("/dev/serial/by-id") of
+    {error, _Err} ->
+      init_dev();
+    ok ->
+      init_serial()
+  end.
+
+init_dev() ->
+  Ref = inotify:watch("/dev", [create]),
+  inotify:add_handler(Ref, ?SERVER, dev),
+  {ok, #state{comm_map = #{}, inotify_ref = Ref}}.
+
+init_serial() ->
+  {ok, Filenames} = file:list_dir("/dev/serial/by-id"),
+  Comms = lists:map(fun(File) ->
+                      {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
+                      {list_to_atom(File), CID}
+                    end, Filenames),
+  Comm_Map = maps:from_list(Comms),
+  Ref = inotify:watch("/dev/serial/by-id", [create]),
+  inotify:add_handler(Ref, ?SERVER, ser),
+  {ok, #state{comm_map = Comm_Map, inotify_ref = Ref}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -63,17 +90,17 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), term()}, State :: term()) ->
-	  {reply, Reply :: term(), NewState :: term()} |
-	  {reply, Reply :: term(), NewState :: term(), Timeout :: timeout()} |
-	  {reply, Reply :: term(), NewState :: term(), hibernate} |
-	  {noreply, NewState :: term()} |
-	  {noreply, NewState :: term(), Timeout :: timeout()} |
-	  {noreply, NewState :: term(), hibernate} |
-	  {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
-	  {stop, Reason :: term(), NewState :: term()}.
+  {reply, Reply :: term(), NewState :: term()} |
+  {reply, Reply :: term(), NewState :: term(), Timeout :: timeout()} |
+  {reply, Reply :: term(), NewState :: term(), hibernate} |
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
+  {stop, Reason :: term(), NewState :: term()}.
 handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+  Reply = ok,
+  {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -82,12 +109,32 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), State :: term()) ->
-	  {noreply, NewState :: term()} |
-	  {noreply, NewState :: term(), Timeout :: timeout()} |
-	  {noreply, NewState :: term(), hibernate} |
-	  {stop, Reason :: term(), NewState :: term()}.
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {stop, Reason :: term(), NewState :: term()}.
+
+%% or put this in handle_call
+handle_cast({inotify, ser, _EventTag, _Masks, Name}, State = #state{comm_map = Comm_Map}) ->
+  {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Name}]),
+  % TODO send to radar new one connected
+  {noreply, State#state{comm_map = Comm_Map#{CID => list_to_atom(Name)}}};
+
+handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, State = #state{inotify_ref = OldRef}) ->
+  {ok, Filenames} = file:list_dir("/dev/serial/by-id"),
+  Comms = lists:map(fun(File) ->
+                      {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
+                      {CID, list_to_atom(File)}
+                    end, Filenames),
+  Comm_Map = maps:from_list(Comms),
+  % TODO send to radar new one connected
+  inotify:unwatch(OldRef),
+  Ref = inotify:watch("/dev/serial/by-id/", [create]),
+  inotify:add_handler(Ref, ?SERVER, ser),
+  {noreply, State#state{comm_map = Comm_Map, inotify_ref = Ref}};
+
 handle_cast(_Request, State) ->
-    {noreply, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -96,12 +143,52 @@ handle_cast(_Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: term()) ->
-	  {noreply, NewState :: term()} |
-	  {noreply, NewState :: term(), Timeout :: timeout()} |
-	  {noreply, NewState :: term(), hibernate} |
-	  {stop, Reason :: normal | term(), NewState :: term()}.
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {stop, Reason :: normal | term(), NewState :: term()}.
+
+handle_info({'EXIT', Pid, normal}, State = #state{comm_map = Comm_Map, inotify_ref = OldRef}) ->
+  case maps:take(Pid, Comm_Map) of
+    {_Name, New_Map} when map_size(New_Map) == 0 ->
+      % TODO send to radar that name/Pid was removed
+      inotify:unwatch(OldRef),
+      Ref = inotify:watch("/dev", [create]),
+      inotify:add_handler(Ref, ?SERVER, dev),
+      {noreply, State#state{comm_map = New_Map, inotify_ref = Ref}};
+    {_Name, New_Map}->
+      % TODO send to radar that name/Pid was removed
+      {noreply, State#state{comm_map = New_Map}};
+    error ->
+      %% who died?
+      {noreply, State}
+  end;
 handle_info(_Info, State) ->
-    {noreply, State}.
+  io:format("~w~n", [_Info]),
+  {noreply, State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling inotify events
+%% @end
+%%--------------------------------------------------------------------
+inotify_event(ser = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
+  RegExp = "usb-Texas_Instruments_Texas_Instruments_MSP-FET430UIF_[0-9A-Z]+-if00",
+  case re:run(Name, RegExp) of
+    {match, [{F, L} | _]} ->
+      Filename = string:sub_string(Name, F+1, F+L),
+      gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
+    nomatch ->
+      ok
+  end,
+  ok;
+
+inotify_event(dev = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
+  gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
+
+inotify_event(Arg, _EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
+  io:format("unknown inotify event: Masks: ~p, Name: ~p, Arg ~p~n", [Masks, Name, Arg]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,9 +200,9 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
-		State :: term()) -> any().
+                State :: term()) -> any().
 terminate(_Reason, _State) ->
-    ok.
+  ok.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -124,11 +211,11 @@ terminate(_Reason, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(OldVsn :: term() | {down, term()},
-		  State :: term(),
-		  Extra :: term()) -> {ok, NewState :: term()} |
-	  {error, Reason :: term()}.
+                  State :: term(),
+                  Extra :: term()) -> {ok, NewState :: term()} |
+                                      {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+  {ok, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -139,9 +226,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec format_status(Opt :: normal | terminate,
-		    Status :: list()) -> Status :: term().
+                    Status :: list()) -> Status :: term().
 format_status(_Opt, Status) ->
-    Status.
+  Status.
 
 %%%===================================================================
 %%% Internal functions
