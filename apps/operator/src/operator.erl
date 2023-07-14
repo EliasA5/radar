@@ -76,7 +76,7 @@ init_serial() ->
   {ok, Filenames} = file:list_dir("/dev/serial/by-id"),
   Comms = lists:map(fun(File) ->
                       {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
-                      {list_to_atom(File), CID}
+                      {CID, list_to_atom(File)}
                     end, Filenames),
   Comm_Map = maps:from_list(Comms),
   Ref = inotify:watch("/dev/serial/by-id", [create]),
