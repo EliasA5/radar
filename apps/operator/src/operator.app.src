@@ -5,8 +5,7 @@
   {mod, {operator_app, []}},
   {applications,
    [kernel,
-    stdlib,
-    inotify
+    stdlib
    ]},
   {env,[]},
   {modules, [operator, communication]},

@@ -14,7 +14,7 @@
         {inotify_msg, Mask, Cookie, Name}).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -34,6 +34,9 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
+%% start_link/0 is used for starting the server as a regular gen_server
+%% start_link/1 is used to start operator as an application in a 
+%% supervision tree.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, Pid :: pid()} |
@@ -41,11 +44,20 @@
                       {error, Error :: term()} |
                       ignore.
 start_link() ->
-  case application:ensure_started(inotify) of
-    ok -> ok;
-    {error, _} ->
-      application:start(inotify)
-  end,
+  case application:ensure_started(inotify, permanent) of
+    ok ->
+      gen_server:start_link({local, ?SERVER}, ?MODULE, [], []);
+    Err ->
+      Err
+  end.
+
+-spec start_link(supervisor) ->
+  {ok, Pid :: pid()} |
+  {error, Error :: {already_started, pid()}} |
+  {error, Error :: term()} |
+  ignore.
+
+start_link(supervisor) ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
