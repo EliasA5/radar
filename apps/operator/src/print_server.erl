@@ -83,7 +83,7 @@ init(Args) ->
     process_flag(trap_exit, true),
     PortFiles = proplists:get_value(port_file, Args, ["/dev/ttyACM0"]),
     Ports = lists:map(fun(PortFile) ->
-                  {ok, {Pid, _Mon}} = communication:start_monitor([{operator, ?SERVER}, {port_file, PortFile}]),
+                  {ok, Pid} = communication:start_link([{operator, ?SERVER}, {port_file, PortFile}]),
                   {Pid, PortFile}
               end, PortFiles),
     {ok, #state{ports = Ports}}.
@@ -111,8 +111,8 @@ handle_call(Msg = {send, Opcode, _OpcodeData}, _From, State) ->
   lists:foreach(fun({Pid, _}) -> gen_statem:cast(Pid, Msg) end, State#state.ports),
   {reply, Opcode, State};
 handle_call({add_comm, PortFile}, _From, State= #state{ports = Ports}) ->
-  case communication:start_monitor([{operator, ?SERVER}, {port_file, PortFile}]) of
-    {ok, {Port, _Mon}} ->
+  case communication:start_link([{operator, ?SERVER}, {port_file, PortFile}]) of
+    {ok, Port} ->
       {reply, ok, State#state{ports = [{Port, PortFile} | Ports]}};
     Err ->
       {reply, Err, State}
