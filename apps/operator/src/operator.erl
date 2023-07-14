@@ -119,7 +119,6 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-%% or put this in handle_call
 handle_cast({inotify, ser, _EventTag, _Masks, Name}, State = #state{comm_map = Comm_Map}) ->
   {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Name}]),
   % TODO send to radar new one connected
