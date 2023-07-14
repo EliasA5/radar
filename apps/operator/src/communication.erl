@@ -13,7 +13,7 @@
 -include("defs.hrl").
 
 %% API
--export([start_monitor/1]).
+-export([start_link/1]).
 
 %% gen_statem callbacks
 -export([callback_mode/0, init/1, terminate/3, code_change/4]).
@@ -40,12 +40,12 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec start_monitor(Args :: term()) ->
+-spec start_link(Args :: term()) ->
 	  {ok, Pid :: pid()} |
 	  ignore |
 	  {error, Error :: term()}.
-start_monitor(Args) ->
-    gen_statem:start_monitor(?MODULE, Args, []).
+start_link(Args) ->
+    gen_statem:start_link(?MODULE, Args, []).
 
 %%%===================================================================
 %%% gen_statem callbacks
