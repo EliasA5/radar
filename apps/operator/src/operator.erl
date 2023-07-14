@@ -178,6 +178,9 @@ handle_info(_Info, State) ->
 %% Handling inotify events
 %% @end
 %%--------------------------------------------------------------------
+-spec inotify_event(Arg :: term(), EventTag :: reference(), MsgContents :: '?inotify_msg') ->
+  ok.
+
 inotify_event(ser = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
   RegExp = "usb-Texas_Instruments_Texas_Instruments_MSP-FET430UIF_[0-9A-Z]+-if00",
   case re:run(Name, RegExp) of
@@ -186,8 +189,7 @@ inotify_event(ser = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
       gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
     nomatch ->
       ok
-  end,
-  ok;
+  end;
 
 inotify_event(dev = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
   gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
