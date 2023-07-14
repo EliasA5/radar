@@ -41,6 +41,11 @@
                       {error, Error :: term()} |
                       ignore.
 start_link() ->
+  case application:ensure_started(inotify) of
+    ok -> ok;
+    {error, _} ->
+      application:start(inotify)
+  end,
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
