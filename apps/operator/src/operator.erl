@@ -35,7 +35,7 @@
 %% @doc
 %% Starts the server
 %% start_link/0 is used for starting the server as a regular gen_server
-%% start_link/1 is used to start operator as an application in a 
+%% start_link/1 is used to start operator as an application in a
 %% supervision tree.
 %% @end
 %%--------------------------------------------------------------------

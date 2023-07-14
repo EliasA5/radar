@@ -18,10 +18,11 @@
 -define(SERVER, ?MODULE).
 
 start(_StartType, _StartArgs) ->
-    operator_app:start_link().
+  operator_app:start_link().
 
 stop(_State) ->
-    ok.
+  net_kernel:stop(),
+  ok.
 
 %%%-------------------------------------------------------------------
 %% @end app
