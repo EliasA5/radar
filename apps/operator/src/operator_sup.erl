@@ -11,8 +11,6 @@
 
 -export([init/1]).
 
--export([start_child/2]).
-
 -define(SERVER, ?MODULE).
 
 start_link() ->
@@ -33,19 +31,12 @@ init([]) ->
                  period => 1},
     % try to find existing ttyACM nodes and add all of them
     % make operator node important and shutdown everything if it does
-    ChildSpecs = [],
+    ChildSpecs = [#{id => operator,
+                   start => {operator, start_link, []}
+                   }
+                 ],
     {ok, {SupFlags, ChildSpecs}}.
 
-%% function to add children dynamically
-start_child(_PortFile, _PortOptions) ->
-  ChildSpecs = ok,
-  supervisor:start_child(?SERVER, ChildSpecs).
 
 %% internal functions
-%% get possible serial communication files
-get_ttys() ->
-  "/dev/ttyACM0".
-
-build_child_spec() ->
-  child_spec.
 
