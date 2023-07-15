@@ -22,7 +22,7 @@
 -define(SERVER, ?MODULE).
 
 -record(data, {rec_buf, rec_amount, rec_type, serial_port, operator_port,
-              expected_ack, msg_ack, postpones, file}).
+               expected_ack, msg_ack, postpones, file}).
 -define(TIMEOUT_TIME, 5000).
 
 %%%===================================================================
@@ -41,11 +41,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link(Args :: term()) ->
-	  {ok, Pid :: pid()} |
-	  ignore |
-	  {error, Error :: term()}.
+  {ok, Pid :: pid()} |
+  ignore |
+  {error, Error :: term()}.
 start_link(Args) ->
-    gen_statem:start_link(?MODULE, Args, []).
+  gen_statem:start_link(?MODULE, Args, []).
 
 %%%===================================================================
 %%% gen_statem callbacks
@@ -69,7 +69,7 @@ callback_mode() -> state_functions.
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-	  gen_statem:init_result(atom()).
+  gen_statem:init_result(atom()).
 init([]) ->
   {error, no_port_given};
 init(Args) ->
@@ -88,19 +88,19 @@ init(Args) ->
 %% @private
 %% @doc
 %% There should be one function like this for each state name.
-%% Whenever a gen_statem receives an event, the function 
-%% with the name of the current state (StateName) 
+%% Whenever a gen_statem receives an event, the function
+%% with the name of the current state (StateName)
 %% is called to handle the event.
 %% @end
 %%--------------------------------------------------------------------
 -spec idle('enter',
-		 OldState :: atom(),
-		 Data :: term()) ->
-	  gen_statem:state_enter_result('state_name');
-		(gen_statem:event_type(),
-		 Msg :: term(),
-		 Data :: term()) ->
-	  gen_statem:event_handler_result(atom()).
+           OldState :: atom(),
+           Data :: term()) ->
+  gen_statem:state_enter_result('state_name');
+          (gen_statem:event_type(),
+           Msg :: term(),
+           Data :: term()) ->
+  gen_statem:event_handler_result(atom()).
 
 % ultrasonic
 idle(info, {data, <<?MSPPC_ULTRASONIC:2, Degree:6>>}, Data) ->
@@ -122,43 +122,43 @@ idle(cast, {send, file, File}, Data) ->
 idle(cast, {send, Opcode, _OpData}, Data) ->
   Msg = Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
   {next_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
-idle(info, {'EXIT', _PID, _Reason}, _Data) ->
+idle(info, {'EXIT', _Pid, _Reason}, _Data) ->
   {stop, _Reason};
 % catch all
 idle(_Type, _Msg, _Data) ->
   keep_state_and_data.
 
 -spec rec_ack('enter',
-		 OldState :: atom(),
-		 Data :: term()) ->
-	  gen_statem:state_enter_result('state_name');
-		(gen_statem:event_type(),
-		 Msg :: term(),
-		 Data :: term()) ->
-	  gen_statem:event_handler_result(atom()).
+              OldState :: atom(),
+              Data :: term()) ->
+  gen_statem:state_enter_result('state_name');
+             (gen_statem:event_type(),
+              Msg :: term(),
+              Data :: term()) ->
+  gen_statem:event_handler_result(atom()).
 
-rec_ack(info, {data, _Byte}, Data = #data{postpones = Postpones}) when Postpones =/= 0 ->
+rec_ack(info, {data, _Byte}, #data{postpones = Postpones} = Data) when Postpones =/= 0 ->
   {next_state, rec_ack, Data#data{postpones = Postpones-1}, postpone};
 rec_ack(info, {data, <<?MSPPC_ULTRASONIC:2, _Ack:6>>}, Data) ->
   {next_state, rec_ack, Data#data{postpones = 2}, postpone};
 rec_ack(info, {data, <<?MSPPC_LDR:2, _Ack:6>>}, Data) ->
   {next_state, rec_ack, Data#data{postpones = 1}, postpone};
-rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack, rec_amount = 0}) when Ack =:= ?PCMSP_FILE ->
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{expected_ack = Ack, rec_amount = 0} = Data) when Ack =:= ?PCMSP_FILE ->
   gen_server:cast(Data#data.operator_port, {ack, self(), file_recevied}),
   {next_state, idle, Data};
-rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{file = <<H:8, Tail/binary>>, expected_ack = Ack, rec_amount = RecAmount}) when Ack =:= ?PCMSP_FILE ->
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{file = <<H:8, Tail/binary>>, expected_ack = Ack, rec_amount = RecAmount} = Data) when Ack =:= ?PCMSP_FILE ->
   Data#data.serial_port ! {send, <<H:8>>},
   gen_server:cast(Data#data.operator_port, {ack, self(), ready_to_rec_next, RecAmount}),
   % what type of ack should we expect?
   {next_state, rec_ack, Data#data{file = Tail, rec_amount = RecAmount-1}, {state_timeout, ?TIMEOUT_TIME, Data}};
-rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, Data = #data{expected_ack = Ack}) ->
+rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{expected_ack = Ack} = Data) ->
   gen_server:cast(Data#data.operator_port, {ack, self(), Ack}),
   {next_state, idle, Data};
-rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
+rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, #data{expected_ack = _Ack2} = Data) ->
   % what should we do here?
   gen_server:cast(Data#data.operator_port, {wrong_ack, self(), _Ack1, _Ack2}),
   {next_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
-rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
+rec_ack(info, {'EXIT', _Pid, _Reason}, _Data) ->
   {stop, _Reason};
 rec_ack(cast, _Msg, Data) ->
   {next_state, rec_ack, Data, postpone};
@@ -169,24 +169,24 @@ rec_ack(_Type, _Msg, _Data) ->
   keep_state_and_data.
 
 -spec rec('enter',
-		 OldState :: atom(),
-		 Data :: term()) ->
-	  gen_statem:state_enter_result('state_name');
-		(gen_statem:event_type(),
-		 Msg :: term(),
-		 Data :: term()) ->
-	  gen_statem:event_handler_result(atom()).
-rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic, rec_amount = 1}) ->
+          OldState :: atom(),
+          Data :: term()) ->
+  gen_statem:state_enter_result('state_name');
+         (gen_statem:event_type(),
+          Msg :: term(),
+          Data :: term()) ->
+  gen_statem:event_handler_result(atom()).
+rec(info, {data, Byte}, #data{rec_type = ultrasonic, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
   gen_server:cast(Data#data.operator_port, {ultrasonic, self(), format_ultrasonic(RecBuf)}),
   {next_state, idle, Data};
-rec(info, {data, Byte}, Data = #data{rec_type = ultrasonic}) ->
+rec(info, {data, Byte}, #data{rec_type = ultrasonic} = Data) ->
   %append Byte to rec buffer
-  Rec_amount = Data#data.rec_amount-1,
+  RecAmount = Data#data.rec_amount - 1,
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
-  {next_state, rec, Data#data{rec_amount = Rec_amount, rec_buf = RecBuf}, ?TIMEOUT_TIME};
-rec(info, {data, Byte}, Data = #data{rec_type = ldr, rec_amount = 1}) ->
+  {next_state, rec, Data#data{rec_amount = RecAmount, rec_buf = RecBuf}, ?TIMEOUT_TIME};
+rec(info, {data, Byte}, #data{rec_type = ldr, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
   gen_server:cast(Data#data.operator_port, {ldr, self(), format_ldr(RecBuf)}),
@@ -195,7 +195,7 @@ rec(cast, _Msg, Data) ->
   {next_state, rec, Data, [postpone, 5000]};
 rec(timeout, _Msg, _Data) ->
   {stop, timeout};
-rec(info, {'EXIT', _PID, _Reason}, _Data) ->
+rec(info, {'EXIT', _Pid, _Reason}, _Data) ->
   {stop, _Reason};
 % catch all
 rec(_Type, _Msg, _Data) ->
@@ -211,9 +211,9 @@ rec(_Type, _Msg, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: term(), State :: term(), Data :: term()) ->
-	  any().
+  any().
 terminate(_Reason, _State, _Data) ->
-    void.
+  void.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -222,12 +222,12 @@ terminate(_Reason, _State, _Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec code_change(
-	OldVsn :: term() | {down,term()},
-	State :: term(), Data :: term(), Extra :: term()) ->
-	  {ok, NewState :: term(), NewData :: term()} |
-	  (Reason :: term()).
+        OldVsn :: term() | {down, term()},
+        State :: term(), Data :: term(), Extra :: term()) ->
+  {ok, NewState :: term(), NewData :: term()} |
+  (Reason :: term()).
 code_change(_OldVsn, State, Data, _Extra) ->
-    {ok, State, Data}.
+  {ok, State, Data}.
 
 %%%===================================================================
 %%% Internal functions

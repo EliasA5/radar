@@ -94,10 +94,10 @@ init_serial() ->
                       {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
                       {CID, list_to_atom(File)}
                     end, Filenames),
-  Comm_Map = maps:from_list(Comms),
+  CommMap = maps:from_list(Comms),
   Ref = inotify:watch("/dev/serial/by-id", [create]),
   inotify:add_handler(Ref, ?SERVER, ser),
-  {ok, #state{comm_map = Comm_Map, inotify_ref = Ref}}.
+  {ok, #state{comm_map = CommMap, inotify_ref = Ref}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -130,23 +130,23 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_cast({inotify, ser, _EventTag, _Masks, Name}, State = #state{comm_map = Comm_Map}) ->
+handle_cast({inotify, ser, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
   {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Name}]),
   % TODO send to radar new one connected
-  {noreply, State#state{comm_map = Comm_Map#{CID => list_to_atom(Name)}}};
+  {noreply, State#state{comm_map = CommMap#{CID => list_to_atom(Name)}}};
 
-handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, State = #state{inotify_ref = OldRef}) ->
+handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = OldRef} = State) ->
   {ok, Filenames} = file:list_dir("/dev/serial/by-id"),
   Comms = lists:map(fun(File) ->
                       {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
                       {CID, list_to_atom(File)}
                     end, Filenames),
-  Comm_Map = maps:from_list(Comms),
+  CommMap = maps:from_list(Comms),
   % TODO send to radar new one connected
   inotify:unwatch(OldRef),
   Ref = inotify:watch("/dev/serial/by-id/", [create]),
   inotify:add_handler(Ref, ?SERVER, ser),
-  {noreply, State#state{comm_map = Comm_Map, inotify_ref = Ref}};
+  {noreply, State#state{comm_map = CommMap, inotify_ref = Ref}};
 
 handle_cast(_Request, State) ->
   {noreply, State}.
@@ -163,17 +163,17 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
-handle_info({'EXIT', Pid, normal}, State = #state{comm_map = Comm_Map, inotify_ref = OldRef}) ->
-  case maps:take(Pid, Comm_Map) of
-    {_Name, New_Map} when map_size(New_Map) == 0 ->
+handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
+  case maps:take(Pid, CommMap) of
+    {_Name, NewMap} when map_size(NewMap) == 0 ->
       % TODO send to radar that name/Pid was removed
       inotify:unwatch(OldRef),
       Ref = inotify:watch("/dev", [create]),
       inotify:add_handler(Ref, ?SERVER, dev),
-      {noreply, State#state{comm_map = New_Map, inotify_ref = Ref}};
-    {_Name, New_Map}->
+      {noreply, State#state{comm_map = NewMap, inotify_ref = Ref}};
+    {_Name, NewMap} ->
       % TODO send to radar that name/Pid was removed
-      {noreply, State#state{comm_map = New_Map}};
+      {noreply, State#state{comm_map = NewMap}};
     error ->
       %% who died?
       {noreply, State}

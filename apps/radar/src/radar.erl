@@ -96,7 +96,7 @@ start_link() ->
 init([]) ->
   process_flag(trap_exit, true),
   wx:new(),
-  Frame = wxFrame:new(wx:null(), 1 , "Radar"),
+  Frame = wxFrame:new(wx:null(), 1, "Radar"),
   % spawn windows
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
   StatusBar = wxStatusBar:new(Frame),
@@ -178,46 +178,46 @@ handle_event(#wx{id=?SUS_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{}) ->
   % do something with the button
   io:format("Scan button pressed~n"),
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?SLDR_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{}) ->
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{}) ->
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{}) ->
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{}) ->
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{}) ->
 
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{frame = _Frame, status_bar_stats = Stats}) ->
   Env = wx:get_env(),
   spawn(fun() -> stats_dialog(Env, Stats) end),
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{frame = _Frame}) ->
   Env = wx:get_env(),
   spawn(fun() -> send_file_dialog(Env) end),
-  {noreply,State};
+  {noreply, State};
 
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
              State = #state{frame = _Frame}) ->
   Env = wx:get_env(),
   spawn(fun() -> slider_dialog(Env) end),
-  {noreply,State};
+  {noreply, State};
 
 handle_event(Cmd = #wx{}, State) ->
   io:format("got event: ~w~n", [Cmd]),
@@ -368,7 +368,7 @@ slider_dialog(Env) ->
 send_file_dialog(Env) ->
   wx:set_env(Env),
   {ok, CurrDir} = file:get_cwd(),
-  FileDialog = wxFileDialog:new(wx:null(),[
+  FileDialog = wxFileDialog:new(wx:null(), [
     {message, "Pick a file to send"},
     {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
     {defaultDir, "~"},
@@ -386,7 +386,7 @@ send_file_dialog(Env) ->
 
 stats_dialog(Env, Stats) ->
   wx:set_env(Env),
-  StatsDialog = wxDialog:new(wx:null(), ?wxID_ANY,"Stats Report", [
+  StatsDialog = wxDialog:new(wx:null(), ?wxID_ANY, "Stats Report", [
     {style, ?wxDEFAULT_DIALOG_STYLE bor ?wxRESIZE_BORDER}
    ]),
  StatsSizer = wxBoxSizer:new(?wxVERTICAL),
@@ -413,19 +413,19 @@ stats_dialog(Env, Stats) ->
        0 ->
          ok;
        1 ->
-         wxListCtrl:setItemBackgroundColour(ListCtrl, Idx, {240,240,240,255})
+         wxListCtrl:setItemBackgroundColour(ListCtrl, Idx, {240, 240, 240, 255})
      end,
      ok
   end,
  Names = record_info(fields, stats),
- [_| Values] = tuple_to_list(Stats),
+ [_ | Values] = tuple_to_list(Stats),
  wx:foreach(Fun, lists:zip3(lists:seq(0, length(Names) - 1), Names, Values)),
 
  wxBoxSizer:add(StatsSizer, ListCtrl, [
    {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
    {border, 5}
  ]),
- 
+
  wxBoxSizer:add(StatsSizer, Buttons, [
    {flag, ?wxALIGN_CENTER bor ?wxALL},
    {border, 5}
