@@ -165,15 +165,18 @@ handle_cast(_Request, State) ->
 
 handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
   case maps:take(Pid, CommMap) of
-    {_Name, NewMap} when map_size(NewMap) == 0 ->
-      % TODO send to radar that name/Pid was removed
-      inotify:unwatch(OldRef),
-      Ref = inotify:watch("/dev", [create]),
-      inotify:add_handler(Ref, ?SERVER, dev),
-      {noreply, State#state{comm_map = NewMap, inotify_ref = Ref}};
     {_Name, NewMap} ->
       % TODO send to radar that name/Pid was removed
-      {noreply, State#state{comm_map = NewMap}};
+      Ref = case map_size(NewMap) of
+        0 ->
+          inotify:unwatch(OldRef),
+          NewRef = inotify:watch("/dev", [create]),
+          inotify:add_handler(NewRef, ?SERVER, dev),
+          NewRef;
+        _ ->
+          OldRef
+      end,
+      {noreply, State#state{comm_map = NewMap, inotify_ref = Ref}};
     error ->
       %% who died?
       {noreply, State}
