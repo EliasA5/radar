@@ -123,7 +123,10 @@ idle(cast, {send, Opcode, _OpData}, Data) ->
   Msg = Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
   {next_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(info, {'EXIT', _PID, _Reason}, _Data) ->
-  {stop, _Reason}.
+  {stop, _Reason};
+% catch all
+idle(_Type, _Msg, _Data) ->
+  keep_state_and_data.
 
 -spec rec_ack('enter',
 		 OldState :: atom(),
@@ -155,15 +158,15 @@ rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ac
   % what should we do here?
   gen_server:cast(Data#data.operator_port, {wrong_ack, self(), _Ack1, _Ack2}),
   {next_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
-rec_ack(info, Msg, Data) ->
-  gen_server:cast(Data#data.operator_port, {unknown_info, self(), Msg}),
-  keep_state_and_data;
+rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
+  {stop, _Reason};
 rec_ack(cast, _Msg, Data) ->
   {next_state, rec_ack, Data, postpone};
 rec_ack(state_timeout, _Msg, Data) ->
   {next_state, idle, Data};
-rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
-  {stop, _Reason}.
+% catch all
+rec_ack(_Type, _Msg, _Data) ->
+  keep_state_and_data.
 
 -spec rec('enter',
 		 OldState :: atom(),
@@ -193,7 +196,10 @@ rec(cast, _Msg, Data) ->
 rec(timeout, _Msg, _Data) ->
   {stop, timeout};
 rec(info, {'EXIT', _PID, _Reason}, _Data) ->
-  {stop, _Reason}.
+  {stop, _Reason};
+% catch all
+rec(_Type, _Msg, _Data) ->
+  keep_state_and_data.
 
 %%--------------------------------------------------------------------
 %% @private
