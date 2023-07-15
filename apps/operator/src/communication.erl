@@ -10,7 +10,7 @@
 
 -behaviour(gen_statem).
 
--include("defs.hrl").
+-include("include/defs.hrl").
 
 %% API
 -export([start_link/1]).

@@ -10,8 +10,7 @@
 
 -behaviour(gen_server).
 
--define(inotify_msg(Mask, Cookie, Name),
-        {inotify_msg, Mask, Cookie, Name}).
+-include("inotify/include/inotify.hrl").
 
 %% API
 -export([start_link/0, start_link/1]).
