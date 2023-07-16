@@ -89,12 +89,7 @@ init_dev() ->
   {ok, #state{comm_map = #{}, inotify_ref = Ref}}.
 
 init_serial() ->
-  {ok, Filenames} = file:list_dir("/dev/serial/by-id"),
-  Comms = lists:map(fun(File) ->
-                      {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
-                      {CID, list_to_atom(File)}
-                    end, Filenames),
-  CommMap = maps:from_list(Comms),
+  CommMap = get_all_comms(),
   Ref = inotify:watch("/dev/serial/by-id", [create]),
   inotify:add_handler(Ref, ?SERVER, ser),
   {ok, #state{comm_map = CommMap, inotify_ref = Ref}}.
@@ -131,17 +126,16 @@ handle_call(_Request, _From, State) ->
   {stop, Reason :: term(), NewState :: term()}.
 
 handle_cast({inotify, ser, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
-  {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Name}]),
-  % TODO send to radar new one connected
-  {noreply, State#state{comm_map = CommMap#{CID => list_to_atom(Name)}}};
+  case get_comm(Name) of
+    {true, {Cid, AtomName}} ->
+      % TODO send to radar new one connected
+      {noreply, State#state{comm_map = CommMap#{Cid => AtomName}}};
+    false ->
+      {noreply, State}
+  end;
 
 handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = OldRef} = State) ->
-  {ok, Filenames} = file:list_dir("/dev/serial/by-id"),
-  Comms = lists:map(fun(File) ->
-                      {ok, CID} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ File}]),
-                      {CID, list_to_atom(File)}
-                    end, Filenames),
-  CommMap = maps:from_list(Comms),
+  CommMap = get_all_comms(),
   % TODO send to radar new one connected
   inotify:unwatch(OldRef),
   Ref = inotify:watch("/dev/serial/by-id/", [create]),
@@ -194,17 +188,7 @@ handle_info(_Info, State) ->
 -spec inotify_event(Arg :: term(), EventTag :: reference(), MsgContents :: '?inotify_msg') ->
   ok.
 
-inotify_event(ser = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
-  RegExp = "usb-Texas_Instruments_Texas_Instruments_MSP-FET430UIF_[0-9A-Z]+-if00",
-  case re:run(Name, RegExp) of
-    {match, [{F, L} | _]} ->
-      Filename = string:sub_string(Name, F+1, F+L),
-      gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
-    nomatch ->
-      ok
-  end;
-
-inotify_event(dev = Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
+inotify_event(Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
   gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
 
 inotify_event(Arg, _EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
@@ -254,4 +238,22 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
+get_all_comms() ->
+  % delay since it takes a bit of time to create the by-id dir
+  {ok, _Dirs} = file:list_dir("/dev/serial/"),
+  {ok, Filenames} = file:list_dir("/dev/serial/by-id/"),
+  Comms = lists:filtermap(fun get_comm/1, Filenames),
+  CommMap = maps:from_list(Comms),
+  CommMap.
+
+get_comm(Name) ->
+  RegExp = "usb-Texas_Instruments_Texas_Instruments_MSP-FET430UIF_[0-9A-Z]+-if00",
+  case re:run(Name, RegExp) of
+    {match, [{F, L} | _]} ->
+      Filename = string:sub_string(Name, F+1, F+L),
+      {ok, Cid} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Filename}]),
+      {true, {Cid, list_to_atom(Filename)}};
+    nomatch ->
+      false
+  end.
 
