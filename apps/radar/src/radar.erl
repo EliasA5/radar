@@ -175,51 +175,51 @@ handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
 
 handle_event(#wx{id=?SUS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             #state{} = State) ->
   % do something with the button
   io:format("Scan button pressed~n"),
   {noreply, State};
 
 handle_event(#wx{id=?SLDR_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             #state{} = State) ->
   {noreply, State};
 
 handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             #state{} = State) ->
   {noreply, State};
 
 handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             #state{} = State) ->
   {noreply, State};
 
 handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             #state{} = State) ->
   {noreply, State};
 
 handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{}) ->
+             #state{} = State) ->
 
   {noreply, State};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{frame = _Frame, status_bar_stats = Stats}) ->
+             #state{frame = _Frame, status_bar_stats = Stats} = State) ->
   Env = wx:get_env(),
   spawn(fun() -> stats_dialog(Env, Stats) end),
   {noreply, State};
 
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{frame = _Frame}) ->
+             #state{frame = _Frame} = State) ->
   Env = wx:get_env(),
   spawn(fun() -> send_file_dialog(Env) end),
   {noreply, State};
 
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             State = #state{frame = _Frame}) ->
+             #state{frame = _Frame} = State) ->
   Env = wx:get_env(),
   spawn(fun() -> slider_dialog(Env) end),
   {noreply, State};
 
-handle_event(Cmd = #wx{}, State) ->
+handle_event(#wx{} = Cmd, State) ->
   io:format("got event: ~w~n", [Cmd]),
   {noreply, State}.
 
@@ -271,14 +271,14 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
-handle_info({advance_uptime}, State = #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime}}) ->
+handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime}} = State) ->
   {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
   UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
   UpdatedState = State#state{status_bar_stats = #stats{ uptime = Uptime + 1}},
   {noreply, UpdatedState};
 
-handle_info(WxEvent = #wx{}, State) ->
+handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
 handle_info(_Info, State) ->
@@ -367,7 +367,6 @@ slider_dialog(Env) ->
 
 send_file_dialog(Env) ->
   wx:set_env(Env),
-  {ok, CurrDir} = file:get_cwd(),
   FileDialog = wxFileDialog:new(wx:null(), [
     {message, "Pick a file to send"},
     {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
