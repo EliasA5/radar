@@ -35,8 +35,21 @@
           frame,
           canvas,
           status_bar,
-          status_bar_stats
+          status_bar_stats,
+          click_info,
+          radars
 }).
+
+-record(click_info, {
+          key
+}).
+
+-record(radar_info, {
+          pos,
+          bitmap,
+          node,
+          pid
+ }).
 
 -define(SUS_BUTTON, 100).
 -define(SLDR_BUTTON, 101).
@@ -104,6 +117,7 @@ init([]) ->
   wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
   wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
   Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
+
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
   Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
@@ -156,9 +170,15 @@ init([]) ->
   % connect windows to events
   wxFrame:connect(Frame, close_window),
   wxFrame:connect(Frame, command_button_clicked),
+
+  wxPanel:connect(Canvas, paint, [callback]),
+  wxPanel:connect(Canvas, left_down),
+  wxPanel:connect(Canvas, right_down),
   {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
   wxFrame:show(Frame),
-  {ok, #state{frame = Frame, canvas = Canvas, status_bar = StatusBar, status_bar_stats = #stats{}}}.
+  {ok, #state{frame = Frame, canvas = Canvas,
+              status_bar = StatusBar, status_bar_stats = #stats{},
+              click_info = #click_info{}, radars = #{}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -170,6 +190,47 @@ init([]) ->
   {noreply, NewState :: term()} |
   {noreply, NewState :: term(), Timeout :: timeout()} |
   {stop, Reason :: term(), NewState :: term()}.
+
+handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}},
+             #state{radars = Radars} = State) ->
+    Image = wxImage:new("imgs/radar-drawing.jpeg"),
+    Image2 = wxImage:scale(Image, 40, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+    Bmp = wxBitmap:new(Image2),
+    wxImage:destroy(Image),
+    wxImage:destroy(Image2),
+    NewRadars = Radars#{X => #radar_info{pos = {X-20, Y-20}, bitmap = Bmp}},
+    redraw_radars(State#state.canvas, NewRadars),
+    {noreply, State#state{radars = NewRadars}};
+
+handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
+             #state{radars = Radars} = State) ->
+    case find_object({X-20, Y-20}, Radars) of
+      none ->
+        {noreply, State};
+      {Key, _Object} ->
+        wxPanel:connect(State#state.canvas, motion),
+        wxPanel:connect(State#state.canvas, left_up),
+        {noreply, State#state{click_info = #click_info{key = Key}}}
+    end;
+
+handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
+             #state{radars = Radars, click_info = #click_info{key = Key}} = State) ->
+  case Key of
+    undefined ->
+      {noreply, State};
+    _ ->
+      NewPos = {X1-20, Y1-20},
+      NewRadars = maps:update_with(Key, fun(Info) ->
+                                           Info#radar_info{pos = NewPos}
+                                       end, Radars),
+      redraw_radars(State#state.canvas, NewRadars),
+      {noreply, State#state{radars = NewRadars}}
+  end;
+
+handle_event(#wx{event = #wxMouse{type=left_up}}, State) ->
+    wxPanel:disconnect(State#state.canvas, motion),
+    wxPanel:disconnect(State#state.canvas, left_up),
+    {noreply, State#state{click_info = #click_info{}}};
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
@@ -282,6 +343,7 @@ handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
 handle_info(_Info, State) ->
+  io:format("got unknown info: ~p~n", [_Info]),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -435,4 +497,59 @@ stats_dialog(Env, Stats) ->
 
  wxDialog:showModal(StatsDialog),
  wxDialog:destroy(StatsDialog).
+
+
+%%%===================================================================
+%%% Auxilary Internal functions
+%%%===================================================================
+
+find_object({_X, _Y} = Pos, Objects) ->
+  get_first_pred(fun(_Key, Object) -> is_in_box(Pos, Object#radar_info.pos) end, Objects).
+
+get_first_pred(Fun, Map) when is_map(Map) ->
+  pred_on_iter(Fun, maps:iterator(Map));
+get_first_pred(_Fun, Map) ->
+  {badmap, Map}.
+
+pred_on_iter(Fun, Iter) ->
+  case maps:next(Iter) of
+    none -> none;
+    {Key, Value, NextIter} ->
+      case Fun(Key, Value) of
+        true -> {Key, Value};
+        false -> pred_on_iter(Fun, NextIter)
+      end
+  end.
+
+is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
+  case {X - X0, Y - Y0} of
+    {Xdiff, Ydiff} when Xdiff >= -20 andalso Xdiff =< 20 andalso Ydiff >= -20 andalso Ydiff =< 20 ->
+      true;
+    _ ->
+      false
+  end.
+
+redraw_radars(Canvas, Radars) ->
+  {W,H} = wxPanel:getSize(Canvas),
+  Bitmap = wxBitmap:new(erlang:max(W,30),erlang:max(30,H)),
+  Fun = fun(DC) ->
+            wxDC:clear(DC),
+            maps:foreach(fun(_, #radar_info{pos = Pos, bitmap = Bmp}) ->
+                             wxDC:drawBitmap(DC, Bmp, Pos)
+                         end, Radars)
+        end,
+  draw(Canvas, Bitmap, Fun),
+  wxBitmap:destroy(Bitmap).
+
+draw(Canvas, Bitmap, Fun) ->
+  MemoryDC = wxMemoryDC:new(Bitmap),
+  CDC = wxClientDC:new(Canvas),
+
+  Fun(MemoryDC),
+  wxDC:blit(CDC, {0,0},
+            {wxBitmap:getWidth(Bitmap), wxBitmap:getHeight(Bitmap)},
+            MemoryDC, {0,0}),
+
+  wxClientDC:destroy(CDC),
+  wxMemoryDC:destroy(MemoryDC).
 
