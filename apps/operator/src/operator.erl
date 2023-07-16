@@ -26,6 +26,8 @@
 
 -record(state, {comm_map, inotify_ref}).
 
+-record(comm_info, {atom_name}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -127,9 +129,9 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({inotify, ser, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
   case get_comm(Name) of
-    {true, {Cid, AtomName}} ->
+    {true, {Cid, CommInfo}} ->
       % TODO send to radar new one connected
-      {noreply, State#state{comm_map = CommMap#{Cid => AtomName}}};
+      {noreply, State#state{comm_map = CommMap#{Cid => CommInfo}}};
     false ->
       {noreply, State}
   end;
@@ -252,7 +254,7 @@ get_comm(Name) ->
     {match, [{F, L} | _]} ->
       Filename = string:sub_string(Name, F+1, F+L),
       {ok, Cid} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Filename}]),
-      {true, {Cid, list_to_atom(Filename)}};
+      {true, {Cid, #comm_info{atom_name = list_to_atom(Filename)}}};
     nomatch ->
       false
   end.
