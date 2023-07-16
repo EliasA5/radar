@@ -42,13 +42,18 @@ start_link() ->
 %%                  modules => modules()}   % optional
 init([]) ->
     SupFlags = #{strategy => rest_for_one,
-                 intensity => 3,
+                 intensity => 1,
                  period => 1
                 },
     % make operator node important and shutdown everything if it does
     ChildSpecs = [
-                  #{id => inotify,
-                   start => {inotify, start, []}
+                  #{id => inotify_evt,
+                   start => {inotify_evt, start_link, []},
+                   modules => [inotify_evt]
+                   },
+                  #{id => inotify_server,
+                   start => {inotify_server, start_link, []},
+                   modules => [inotify_server]
                    },
                   #{id => operator,
                    start => {operator, start_link, [supervisor]}
