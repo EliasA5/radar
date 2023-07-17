@@ -17,7 +17,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, format_status/2]).
+         handle_continue/2, terminate/2, code_change/3, format_status/2]).
 
 %% internal usage
 -export([]).
@@ -197,8 +197,7 @@ handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
   Bmp = get_image_bitmap("imgs/radar-drawing.jpeg"),
   NewRadars = Radars#{X => #radar_info{pos = {X-20, Y-20}, bitmap = Bmp}},
-  redraw_radars(State#state.canvas, NewRadars),
-  {noreply, State#state{radars = NewRadars}};
+  {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
 handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
              #state{radars = Radars, click_info = #click_info{key = SelectionKey}} = State) ->
@@ -222,8 +221,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
   case find_object({X-20, Y-20}, Radars) of
     none ->
       NewRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
-      redraw_radars(State#state.canvas, NewRadars),
-      {noreply, State#state{radars = NewRadars, click_info = #click_info{}}};
+      {noreply, State#state{radars = NewRadars, click_info = #click_info{}}, {continue, [redraw_radars]}};
     {SelectionKey, Object} ->
       Env = wx:get_env(),
       spawn(fun() ->
@@ -236,10 +234,9 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
     {Key, _Object} ->
       MidRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
       NewRadars = Update_Radar_Bitmaps(Key, MidRadars, "imgs/radar-drawing-selected.jpeg"),
-      redraw_radars(State#state.canvas, NewRadars),
       wxPanel:connect(State#state.canvas, motion),
       wxPanel:connect(State#state.canvas, left_up),
-      {noreply, State#state{radars = NewRadars, click_info = #click_info{key = Key}}}
+      {noreply, State#state{radars = NewRadars, click_info = #click_info{key = Key}}, {continue, [redraw_radars]}}
   end;
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
@@ -247,8 +244,7 @@ handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
   NewPos = {X1-20, Y1-20},
   try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, Radars) of
     NewRadars ->
-      redraw_radars(State#state.canvas, NewRadars),
-      {noreply, State#state{radars = NewRadars}}
+      {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
   catch
     _Err:{badkey, _} ->
       {noreply, State}
@@ -260,8 +256,7 @@ handle_event(#wx{event = #wxMouse{type=left_up}}, State) ->
   {noreply, State};
 
 handle_event(#wx{event = #wxSize{}}, State) ->
-  redraw_radars(State#state.canvas, State#state.radars),
-  {noreply, State};
+  {noreply, State, {continue, [redraw_radars]}};
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
@@ -353,8 +348,7 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                            Info#radar_info{bitmap = Bmp, angle = Angle}
                        end, State#state.radars) of
     NewRadars ->
-      redraw_radars(State#state.canvas, NewRadars),
-      {reply, ok, State#state{radars = NewRadars}}
+      {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
@@ -406,6 +400,28 @@ handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
   {noreply, State}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling all continue call, we use it to update the graphics after
+%% handling transition logic
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_continue(Continue :: term(), State :: term()) ->
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {noreply, NewState :: term(), {continue, Continue :: term()}} |
+  {stop, Reason :: normal | term(), NewState :: term()}.
+
+handle_continue(Continue, State) when is_list(Continue) ->
+  case lists:member(redraw_radars, Continue) of
+    true ->
+      redraw_radars(State#state.canvas, State#state.radars);
+    false ->
+      ok
+  end,
+  {noreply, State}.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
