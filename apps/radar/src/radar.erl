@@ -295,13 +295,22 @@ handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame} = State) ->
   Env = wx:get_env(),
-  spawn(fun() -> send_file_dialog(Env) end),
+  spawn(fun() -> send_file_dialog(Env,
+                                  fun(Path) ->
+                                      io:format("user selected ~s~n", [Path])
+                                  end, "Pick a file to send")
+        end),
   {noreply, State};
 
 handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame} = State) ->
   Env = wx:get_env(),
-  spawn(fun() -> slider_dialog(Env) end),
+  spawn(fun() ->
+            slider_dialog(Env, {0, 180, 90},
+                          fun(Angle) ->
+                              io:format("user clicked ~p~n", [Angle])
+                          end, "Set Radar Angle")
+        end),
   {noreply, State};
 
 handle_event(#wx{} = Cmd, State) ->
@@ -418,25 +427,34 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
-slider_dialog(Env) ->
+-spec slider_dialog(Env :: any(),
+                    Pos :: {Low :: integer(), High :: integer(), Def :: integer()},
+                    Callback :: fun((integer()) -> any()),
+                    Title :: string()) -> ok.
+
+slider_dialog(Env, {Low, High, Def}, Callback, Title) ->
   wx:set_env(Env),
-  SliderDialog = wxDialog:new(wx:null(), ?wxID_ANY, "Set Radar Angle", [
-                                                                        {style, ?wxDEFAULT_DIALOG_STYLE}
-                                                                       ]),
+  SliderDialog = wxDialog:new(wx:null(), ?wxID_ANY, Title,
+                              [
+                               {style, ?wxDEFAULT_DIALOG_STYLE}
+                              ]),
   DialogSizer = wxBoxSizer:new(?wxVERTICAL),
 
   Buttons = wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
-  Slider = wxSlider:new(SliderDialog, ?wxID_ANY, 90, 0, 180, [
-                                                              {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
-                                                             ]),
-  wxSizer:add(DialogSizer, Slider, [
-                                    {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-                                    {border, 5}
-                                   ]),
-  wxSizer:add(DialogSizer, Buttons, [
-                                     {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-                                     {border, 5}
-                                    ]),
+  Slider = wxSlider:new(SliderDialog, ?wxID_ANY, Def, Low, High,
+                        [
+                         {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
+                        ]),
+  wxSizer:add(DialogSizer, Slider,
+              [
+               {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+               {border, 5}
+              ]),
+  wxSizer:add(DialogSizer, Buttons,
+              [
+               {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+               {border, 5}
+              ]),
 
   wxDialog:setSizer(SliderDialog, DialogSizer),
   wxSizer:setSizeHints(DialogSizer, SliderDialog),
@@ -445,29 +463,36 @@ slider_dialog(Env) ->
     ?wxID_OK ->
       Angle = wxSlider:getValue(Slider),
       % TODO add callback
-      io:format("users selected angle: ~w~n", [Angle]);
+      Callback(Angle);
     ?wxID_CANCEL ->
-      io:format("User Canceled~n")
+      ok
   end,
-  wxDialog:destroy(SliderDialog).
+  wxDialog:destroy(SliderDialog),
+  ok.
 
-send_file_dialog(Env) ->
+-spec send_file_dialog(Env :: any(),
+                       Callback :: fun((string()) -> any()),
+                       Title :: string()) -> ok.
+
+send_file_dialog(Env, Callback, Title) ->
   wx:set_env(Env),
-  FileDialog = wxFileDialog:new(wx:null(), [
-                                            {message, "Pick a file to send"},
-                                            {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
-                                            {defaultDir, "~"},
-                                            {defaultFile, ""}
-                                           ]),
+  FileDialog = wxFileDialog:new(wx:null(),
+                                [
+                                 {message, Title},
+                                 {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
+                                 {defaultDir, "~"},
+                                 {defaultFile, ""}
+                                ]),
   case wxFileDialog:showModal(FileDialog) of
     ?wxID_OK ->
       % TODO implement functionality
       FilePath = wxFileDialog:getPath(FileDialog),
-      io:format("user clicked ~s~n", [FilePath]);
+      Callback(FilePath);
     ?wxID_CANCEL ->
-      io:format("user canceled~n")
+      ok
   end,
-  wxFileDialog:destroy(FileDialog).
+  wxFileDialog:destroy(FileDialog),
+  ok.
 
 stats_dialog(Env, Stats) ->
   wx:set_env(Env),
