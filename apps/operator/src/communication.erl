@@ -22,7 +22,7 @@
 -define(SERVER, ?MODULE).
 
 -record(data, {rec_buf, rec_amount, rec_type, serial_port, operator_port,
-               expected_ack, msg_ack, postpones, file}).
+              expected_ack, postpones, file}).
 -define(TIMEOUT_TIME, 5000).
 
 %%%===================================================================
@@ -113,16 +113,16 @@ idle(info, {data, Byte = <<Two:2, Arg:6>>}, _Data) ->
   keep_state_and_data;
 % commands to send
 idle(cast, {send, telemeter, Angle}, Data) ->
-  Msg = Data#data.serial_port ! {send, <<?PCMSP_TELEMETER:2, (Angle div 3):6>>},
-  {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_TELEMETER, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+  Data#data.serial_port ! {send, <<?PCMSP_TELEMETER:2, (Angle div 3):6>>},
+  {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_TELEMETER, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(cast, {send, file, File}, Data) ->
   FileSize = byte_size(File),
-  Msg = Data#data.serial_port ! {send, <<?PCMSP_FILE:2, FileSize:6>>},
-  {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, msg_ack = Msg, postpones = 0, file = File, rec_amount = FileSize}, {state_timeout, ?TIMEOUT_TIME, Data}};
+  Data#data.serial_port ! {send, <<?PCMSP_FILE:2, FileSize:6>>},
+  {next_state, rec_ack, Data#data{expected_ack = ?PCMSP_FILE, postpones = 0, file = File, rec_amount = FileSize}, {state_timeout, ?TIMEOUT_TIME, Data}};
 idle(cast, {send, Opcode, _OpData}, Data) ->
-  Msg = Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
-  {next_state, rec_ack, Data#data{expected_ack = Opcode, msg_ack = Msg, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
-idle(info, {'EXIT', _Pid, _Reason}, _Data) ->
+  Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, Opcode:6>>},
+  {next_state, rec_ack, Data#data{expected_ack = Opcode, postpones = 0}, {state_timeout, ?TIMEOUT_TIME, Data}};
+idle(info, {'EXIT', _PID, _Reason}, _Data) ->
   {stop, _Reason};
 % catch all
 idle(_Type, _Msg, _Data) ->
@@ -154,11 +154,13 @@ rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{file = <<H:8, Tail/binary>>
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{expected_ack = Ack} = Data) ->
   gen_server:cast(Data#data.operator_port, {ack, self(), Ack}),
   {next_state, idle, Data};
-rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, #data{expected_ack = _Ack2} = Data) ->
+rec_ack(info, {data, <<?MSPPC_ACK:2, _Ack1:6>>}, Data = #data{expected_ack = _Ack2}) ->
+  CMD = ?IDLE_CMD,
+  Data#data.serial_port ! {send, <<?PCMSP_COMMAND:2, CMD:6>>},
   % what should we do here?
   gen_server:cast(Data#data.operator_port, {wrong_ack, self(), _Ack1, _Ack2}),
-  {next_state, rec_ack, Data, {state_timeout, ?TIMEOUT_TIME, Data}};
-rec_ack(info, {'EXIT', _Pid, _Reason}, _Data) ->
+  {next_state, rec_ack, Data#data{expected_ack = CMD}, {state_timeout, ?TIMEOUT_TIME, Data}};
+rec_ack(info, {'EXIT', _PID, _Reason}, _Data) ->
   {stop, _Reason};
 rec_ack(cast, _Msg, Data) ->
   {next_state, rec_ack, Data, postpone};
