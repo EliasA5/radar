@@ -46,6 +46,7 @@
 
 -record(radar_info, {
           pos,
+          angle = 0,
           bitmap,
           node,
           pid
@@ -208,7 +209,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
     (K, RadarsMap, Path) ->
       try maps:update_with(K, fun(Info) ->
                                     wxBitmap:destroy(Info#radar_info.bitmap),
-                                    Bmp = get_image_bitmap(Path),
+                                    Bmp = get_image_bitmap(Path, Info#radar_info.angle),
                                     Info#radar_info{bitmap = Bmp}
                                 end, RadarsMap) of
         NewRadars ->
@@ -223,8 +224,14 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
       NewRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
       redraw_radars(State#state.canvas, NewRadars),
       {noreply, State#state{radars = NewRadars, click_info = #click_info{}}};
-    {SelectionKey, _Object} ->
-      io:format("double clicked~n"),
+    {SelectionKey, Object} ->
+      Env = wx:get_env(),
+      spawn(fun() ->
+                slider_dialog(Env, {-180, 180, Object#radar_info.angle},
+                              fun(Angle) ->
+                                  update_angle(SelectionKey, Angle)
+                              end, "Pick Radar Angle")
+            end),
       {noreply, State};
     {Key, _Object} ->
       MidRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
@@ -332,6 +339,26 @@ handle_event(#wx{} = Cmd, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
   {stop, Reason :: term(), NewState :: term()}.
+
+
+handle_call({update_angle, Key, Angle}, _From, State) ->
+  try maps:update_with(Key,
+                       fun(Info) ->
+                           wxBitmap:destroy(Info#radar_info.bitmap),
+                           Path = case State#state.click_info#click_info.key of
+                                    Key -> "imgs/radar-drawing-selected.jpeg";
+                                    _ -> "imgs/radar-drawing.jpeg"
+                                  end,
+                           Bmp = get_image_bitmap(Path, Angle),
+                           Info#radar_info{bitmap = Bmp, angle = Angle}
+                       end, State#state.radars) of
+    NewRadars ->
+      redraw_radars(State#state.canvas, NewRadars),
+      {reply, ok, State#state{radars = NewRadars}}
+  catch
+    _Err:{badkey, _} ->
+      {reply, ok, State}
+  end;
 
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
@@ -602,11 +629,22 @@ draw(Canvas, Bitmap, Fun) ->
   wxClientDC:destroy(CDC),
   wxMemoryDC:destroy(MemoryDC).
 
+
 get_image_bitmap(Path) ->
+  get_image_bitmap(Path, 0).
+
+get_image_bitmap(Path, Angle) ->
+  Rads = -Angle / 180 * math:pi(),
   Image = wxImage:new(Path),
   Image2 = wxImage:scale(Image, 40, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
-  Bmp = wxBitmap:new(Image2),
+  wxImage:setMaskColour(Image2, 255, 255, 255),
+  Image3 = wxImage:rotate(Image2, Rads, {20,20}, [{interpolating, true}]),
+  Bmp = wxBitmap:new(Image3),
   wxImage:destroy(Image),
   wxImage:destroy(Image2),
+  wxImage:destroy(Image3),
   Bmp.
+
+update_angle(Key, Angle) ->
+  gen_server:call({global, ?SERVER}, {update_angle, Key, Angle}).
 
