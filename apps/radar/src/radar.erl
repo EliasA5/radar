@@ -49,7 +49,7 @@
           bitmap,
           node,
           pid
- }).
+}).
 
 -define(SUS_BUTTON, 100).
 -define(SLDR_BUTTON, 101).
@@ -194,25 +194,46 @@ init([]) ->
 
 handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
-    Image = wxImage:new("imgs/radar-drawing.jpeg"),
-    Image2 = wxImage:scale(Image, 40, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
-    Bmp = wxBitmap:new(Image2),
-    wxImage:destroy(Image),
-    wxImage:destroy(Image2),
-    NewRadars = Radars#{X => #radar_info{pos = {X-20, Y-20}, bitmap = Bmp}},
-    redraw_radars(State#state.canvas, NewRadars),
-    {noreply, State#state{radars = NewRadars}};
+  Bmp = get_image_bitmap("imgs/radar-drawing.jpeg"),
+  NewRadars = Radars#{X => #radar_info{pos = {X-20, Y-20}, bitmap = Bmp}},
+  redraw_radars(State#state.canvas, NewRadars),
+  {noreply, State#state{radars = NewRadars}};
 
 handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
-             #state{radars = Radars} = State) ->
-    case find_object({X-20, Y-20}, Radars) of
-      none ->
-        {noreply, State};
-      {Key, _Object} ->
-        wxPanel:connect(State#state.canvas, motion),
-        wxPanel:connect(State#state.canvas, left_up),
-        {noreply, State#state{click_info = #click_info{key = Key}}}
-    end;
+             #state{radars = Radars, click_info = #click_info{key = SelectionKey}} = State) ->
+  Update_Radar_Bitmaps =
+  fun
+    (undefined, RadarsMap, _Path) ->
+      RadarsMap;
+    (K, RadarsMap, Path) ->
+      try maps:update_with(K, fun(Info) ->
+                                    wxBitmap:destroy(Info#radar_info.bitmap),
+                                    Bmp = get_image_bitmap(Path),
+                                    Info#radar_info{bitmap = Bmp}
+                                end, RadarsMap) of
+        NewRadars ->
+          NewRadars
+      catch
+        _Err:{badkey, _} ->
+          RadarsMap
+      end
+  end,
+  case find_object({X-20, Y-20}, Radars) of
+    none ->
+      NewRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
+      redraw_radars(State#state.canvas, NewRadars),
+      {noreply, State#state{radars = NewRadars, click_info = #click_info{}}};
+    {SelectionKey, _Object} ->
+      io:format("double clicked~n"),
+      {noreply, State};
+    {Key, _Object} ->
+      MidRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
+      NewRadars = Update_Radar_Bitmaps(Key, MidRadars, "imgs/radar-drawing-selected.jpeg"),
+      redraw_radars(State#state.canvas, NewRadars),
+      wxPanel:connect(State#state.canvas, motion),
+      wxPanel:connect(State#state.canvas, left_up),
+      {noreply, State#state{radars = NewRadars, click_info = #click_info{key = Key}}}
+  end;
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
              #state{radars = Radars, click_info = #click_info{key = Key}} = State) ->
@@ -227,9 +248,9 @@ handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
   end;
 
 handle_event(#wx{event = #wxMouse{type=left_up}}, State) ->
-    wxPanel:disconnect(State#state.canvas, motion),
-    wxPanel:disconnect(State#state.canvas, left_up),
-    {noreply, State#state{click_info = #click_info{}}};
+  wxPanel:disconnect(State#state.canvas, motion),
+  wxPanel:disconnect(State#state.canvas, left_up),
+  {noreply, State};
 
 handle_event(#wx{event = #wxSize{}}, State) ->
   redraw_radars(State#state.canvas, State#state.radars),
@@ -400,22 +421,22 @@ format_status(_Opt, Status) ->
 slider_dialog(Env) ->
   wx:set_env(Env),
   SliderDialog = wxDialog:new(wx:null(), ?wxID_ANY, "Set Radar Angle", [
-     {style, ?wxDEFAULT_DIALOG_STYLE}
-  ]),
+                                                                        {style, ?wxDEFAULT_DIALOG_STYLE}
+                                                                       ]),
   DialogSizer = wxBoxSizer:new(?wxVERTICAL),
 
   Buttons = wxDialog:createButtonSizer(SliderDialog, ?wxOK bor ?wxCANCEL),
   Slider = wxSlider:new(SliderDialog, ?wxID_ANY, 90, 0, 180, [
-     {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
-  ]),
+                                                              {style, ?wxSL_HORIZONTAL bor ?wxSL_LABELS bor ?wxSL_BOTTOM}
+                                                             ]),
   wxSizer:add(DialogSizer, Slider, [
-     {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-     {border, 5}
-  ]),
+                                    {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+                                    {border, 5}
+                                   ]),
   wxSizer:add(DialogSizer, Buttons, [
-     {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-     {border, 5}
-  ]),
+                                     {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+                                     {border, 5}
+                                    ]),
 
   wxDialog:setSizer(SliderDialog, DialogSizer),
   wxSizer:setSizeHints(DialogSizer, SliderDialog),
@@ -433,11 +454,11 @@ slider_dialog(Env) ->
 send_file_dialog(Env) ->
   wx:set_env(Env),
   FileDialog = wxFileDialog:new(wx:null(), [
-    {message, "Pick a file to send"},
-    {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
-    {defaultDir, "~"},
-    {defaultFile, ""}
-  ]),
+                                            {message, "Pick a file to send"},
+                                            {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
+                                            {defaultDir, "~"},
+                                            {defaultFile, ""}
+                                           ]),
   case wxFileDialog:showModal(FileDialog) of
     ?wxID_OK ->
       % TODO implement functionality
@@ -451,55 +472,55 @@ send_file_dialog(Env) ->
 stats_dialog(Env, Stats) ->
   wx:set_env(Env),
   StatsDialog = wxDialog:new(wx:null(), ?wxID_ANY, "Stats Report", [
-    {style, ?wxDEFAULT_DIALOG_STYLE bor ?wxRESIZE_BORDER}
-   ]),
- StatsSizer = wxBoxSizer:new(?wxVERTICAL),
- Buttons = wxDialog:createButtonSizer(StatsDialog, ?wxOK),
+                                                                    {style, ?wxDEFAULT_DIALOG_STYLE bor ?wxRESIZE_BORDER}
+                                                                   ]),
+  StatsSizer = wxBoxSizer:new(?wxVERTICAL),
+  Buttons = wxDialog:createButtonSizer(StatsDialog, ?wxOK),
 
- Font = wxFont:new(9, ?wxFONTFAMILY_DEFAULT, ?wxFONTSTYLE_NORMAL, ?
- wxFONTWEIGHT_BOLD),
- wxListCtrl:setFont(StatsDialog, Font),
+  Font = wxFont:new(9, ?wxFONTFAMILY_DEFAULT, ?wxFONTSTYLE_NORMAL, ?
+                    wxFONTWEIGHT_BOLD),
+  wxListCtrl:setFont(StatsDialog, Font),
 
- ListCtrl = wxListCtrl:new(StatsDialog, [
-   {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL bor ?wxLC_VRULES}
- ]),
- wxListCtrl:insertColumn(ListCtrl, 0, "Statistic", []),
- wxListCtrl:setColumnWidth(ListCtrl, 0, 100),
- wxListCtrl:insertColumn(ListCtrl, 1, "Value", []),
- wxListCtrl:setColumnWidth(ListCtrl, 1, 100),
- Fun =
+  ListCtrl = wxListCtrl:new(StatsDialog, [
+                                          {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL bor ?wxLC_VRULES}
+                                         ]),
+  wxListCtrl:insertColumn(ListCtrl, 0, "Statistic", []),
+  wxListCtrl:setColumnWidth(ListCtrl, 0, 100),
+  wxListCtrl:insertColumn(ListCtrl, 1, "Value", []),
+  wxListCtrl:setColumnWidth(ListCtrl, 1, 100),
+  Fun =
   fun({Idx, Name, Value}) ->
-     ValStr = integer_to_list(Value),
-     wxListCtrl:insertItem(ListCtrl, Idx, ""),
-     wxListCtrl:setItem(ListCtrl, Idx, 0, atom_to_list(Name)),
-     wxListCtrl:setItem(ListCtrl, Idx, 1, ValStr),
-     case (Idx rem 2) of
-       0 ->
-         ok;
-       1 ->
-         wxListCtrl:setItemBackgroundColour(ListCtrl, Idx, {240, 240, 240, 255})
-     end,
-     ok
+      ValStr = integer_to_list(Value),
+      wxListCtrl:insertItem(ListCtrl, Idx, ""),
+      wxListCtrl:setItem(ListCtrl, Idx, 0, atom_to_list(Name)),
+      wxListCtrl:setItem(ListCtrl, Idx, 1, ValStr),
+      case (Idx rem 2) of
+        0 ->
+          ok;
+        1 ->
+          wxListCtrl:setItemBackgroundColour(ListCtrl, Idx, {240, 240, 240, 255})
+      end,
+      ok
   end,
- Names = record_info(fields, stats),
- [_ | Values] = tuple_to_list(Stats),
- wx:foreach(Fun, lists:zip3(lists:seq(0, length(Names) - 1), Names, Values)),
+  Names = record_info(fields, stats),
+  [_ | Values] = tuple_to_list(Stats),
+  wx:foreach(Fun, lists:zip3(lists:seq(0, length(Names) - 1), Names, Values)),
 
- wxBoxSizer:add(StatsSizer, ListCtrl, [
-   {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
-   {border, 5}
- ]),
+  wxBoxSizer:add(StatsSizer, ListCtrl, [
+                                        {flag, ?wxEXPAND bor ?wxALIGN_CENTER bor ?wxALL},
+                                        {border, 5}
+                                       ]),
 
- wxBoxSizer:add(StatsSizer, Buttons, [
-   {flag, ?wxALIGN_CENTER bor ?wxALL},
-   {border, 5}
- ]),
- % wxBoxSizer:setMinSize(StatsSizer, 300, 300),
- wxDialog:setSizer(StatsDialog, StatsSizer),
- wxSizer:setSizeHints(StatsSizer, StatsDialog),
+  wxBoxSizer:add(StatsSizer, Buttons, [
+                                       {flag, ?wxALIGN_CENTER bor ?wxALL},
+                                       {border, 5}
+                                      ]),
+  % wxBoxSizer:setMinSize(StatsSizer, 300, 300),
+  wxDialog:setSizer(StatsDialog, StatsSizer),
+  wxSizer:setSizeHints(StatsSizer, StatsDialog),
 
- wxDialog:showModal(StatsDialog),
- wxDialog:destroy(StatsDialog).
+  wxDialog:showModal(StatsDialog),
+  wxDialog:destroy(StatsDialog).
 
 
 %%%===================================================================
@@ -555,4 +576,12 @@ draw(Canvas, Bitmap, Fun) ->
 
   wxClientDC:destroy(CDC),
   wxMemoryDC:destroy(MemoryDC).
+
+get_image_bitmap(Path) ->
+  Image = wxImage:new(Path),
+  Image2 = wxImage:scale(Image, 40, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+  Bmp = wxBitmap:new(Image2),
+  wxImage:destroy(Image),
+  wxImage:destroy(Image2),
+  Bmp.
 
