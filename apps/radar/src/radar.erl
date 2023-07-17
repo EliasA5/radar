@@ -172,6 +172,7 @@ init([]) ->
   wxFrame:connect(Frame, command_button_clicked),
 
   wxPanel:connect(Canvas, paint, [callback]),
+  wxPanel:connect(Canvas, size),
   wxPanel:connect(Canvas, left_down),
   wxPanel:connect(Canvas, right_down),
   {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
@@ -215,22 +216,24 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
              #state{radars = Radars, click_info = #click_info{key = Key}} = State) ->
-  case Key of
-    undefined ->
-      {noreply, State};
-    _ ->
-      NewPos = {X1-20, Y1-20},
-      NewRadars = maps:update_with(Key, fun(Info) ->
-                                           Info#radar_info{pos = NewPos}
-                                       end, Radars),
+  NewPos = {X1-20, Y1-20},
+  try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, Radars) of
+    NewRadars ->
       redraw_radars(State#state.canvas, NewRadars),
       {noreply, State#state{radars = NewRadars}}
+  catch
+    _Err:{badkey, _} ->
+      {noreply, State}
   end;
 
 handle_event(#wx{event = #wxMouse{type=left_up}}, State) ->
     wxPanel:disconnect(State#state.canvas, motion),
     wxPanel:disconnect(State#state.canvas, left_up),
     {noreply, State#state{click_info = #click_info{}}};
+
+handle_event(#wx{event = #wxSize{}}, State) ->
+  redraw_radars(State#state.canvas, State#state.radars),
+  {noreply, State};
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
