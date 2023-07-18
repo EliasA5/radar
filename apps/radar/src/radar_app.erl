@@ -16,14 +16,15 @@
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    radar_app:start_link().
+  radar_app:start_link().
 
 stop(_State) ->
-    wx:destroy(),
-    ok.
+  wx:destroy(),
+  init:stop(0),
+  ok.
 
 start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+  supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 %% sup_flags() = #{strategy => strategy(),         % optional
 %%                 intensity => non_neg_integer(), % optional
@@ -35,17 +36,17 @@ start_link() ->
 %%                  type => worker(),       % optional
 %%                  modules => modules()}   % optional
 init([]) ->
-    SupFlags = #{strategy => one_for_all,
-                 intensity => 1,
-                 period => 1,
-                 auto_shutdown => any_significant
-                },
-    ChildSpecs = [#{id => radar,
-                    start => {radar, start_link, []},
-                    restart => transient,
-                    significant => true
-                   }],
-    {ok, {SupFlags, ChildSpecs}}.
+  SupFlags = #{strategy => one_for_all,
+               intensity => 1,
+               period => 1,
+               auto_shutdown => any_significant
+              },
+  ChildSpecs = [#{id => radar,
+                  start => {radar, start_link, []},
+                  restart => transient,
+                  significant => true
+                 }],
+  {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
 
