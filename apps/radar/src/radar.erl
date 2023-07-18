@@ -63,6 +63,9 @@
 -define(SFILE_BUTTON, 107).
 -define(STELEM_BUTTON, 108).
 
+-define(RADAR_DRAWING, "imgs/radar-normal.png").
+-define(RADAR_DRAWING_SELECTED, "imgs/radar-selected.png").
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -201,12 +204,13 @@ init([]) ->
 
 handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
-  Bmp = get_image_bitmap("imgs/radar-drawing.jpeg"),
-  NewRadars = Radars#{X => #radar_info{pos = {X-20, Y-20}, bitmap = Bmp}},
+  Bmp = get_image_bitmap(?RADAR_DRAWING),
+  Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
+  NewRadars = Radars#{X => #radar_info{pos = Pos, bitmap = Bmp}},
   {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
 handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
-  case find_object({X-20, Y-20}, State#state.radars) of
+  case find_object(reclip(X, Y, wxPanel:getSize(State#state.canvas)), State#state.radars) of
     none ->
       {noreply, State};
     {SelectionKey, Object} ->
@@ -239,17 +243,17 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
           RadarsMap
       end
   end,
-  case find_object({X-20, Y-20}, Radars) of
+  case find_object(reclip(X, Y, wxPanel:getSize(State#state.canvas)), Radars) of
     none ->
       NewRadars = sets:fold(fun(K, OldRadars) ->
-                                Update_Radar_Bitmaps(K, OldRadars, "imgs/radar-drawing.jpeg")
+                                Update_Radar_Bitmaps(K, OldRadars, ?RADAR_DRAWING)
                             end,
                             Radars, Selected),
       {noreply, State#state{radars = NewRadars,
                             click_info = #click_info{selected = sets:new()}
                            }, {continue, [redraw_radars]}};
     {Key, _Object} ->
-      NewRadars = Update_Radar_Bitmaps(Key, Radars, "imgs/radar-drawing-selected.jpeg"),
+      NewRadars = Update_Radar_Bitmaps(Key, Radars, ?RADAR_DRAWING_SELECTED),
       wxPanel:connect(State#state.canvas, motion),
       wxPanel:connect(State#state.canvas, left_up),
       {noreply, State#state{radars = NewRadars,
@@ -259,8 +263,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
              #state{click_info = #click_info{key = Key}} = State) ->
-  {W, H} = wxPanel:getSize(State#state.canvas),
-  NewPos = reclip(X1, Y1, {W, H}),
+  NewPos = reclip(X1, Y1, wxPanel:getSize(State#state.canvas)),
   try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, State#state.radars) of
     NewRadars ->
       {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
@@ -363,8 +366,8 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                        fun(Info) ->
                            wxBitmap:destroy(Info#radar_info.bitmap),
                            Path = case sets:is_element(Key, State#state.click_info#click_info.selected) of
-                                    true -> "imgs/radar-drawing-selected.jpeg";
-                                    false -> "imgs/radar-drawing.jpeg"
+                                    true -> ?RADAR_DRAWING_SELECTED;
+                                    false -> ?RADAR_DRAWING
                                   end,
                            Bmp = get_image_bitmap(Path, Angle),
                            Info#radar_info{bitmap = Bmp, angle = Angle}
@@ -674,7 +677,7 @@ get_image_bitmap(Path) ->
 get_image_bitmap(Path, Angle) ->
   Rads = -Angle / 180 * math:pi(),
   Image = wxImage:new(Path),
-  Image2 = wxImage:scale(Image, 40, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+  Image2 = wxImage:scale(Image, 50, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
   wxImage:setMaskColour(Image2, 255, 255, 255),
   Image3 = wxImage:rotate(Image2, Rads, {20,20}, [{interpolating, true}]),
   Bmp = wxBitmap:new(Image3),
