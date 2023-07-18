@@ -172,6 +172,7 @@ init([]) ->
   % connect windows to events
   wxFrame:connect(Frame, close_window),
   wxFrame:connect(Frame, command_button_clicked),
+  wxFrame:connect(Frame, iconize),
 
   wxPanel:connect(Canvas, paint, [callback]),
   wxPanel:connect(Canvas, size),
@@ -271,6 +272,9 @@ handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo}
   {noreply, State#state{click_info = ClickInfo#click_info{key = undefined}}};
 
 handle_event(#wx{event = #wxSize{}}, State) ->
+  {noreply, State, {continue, [redraw_radars]}};
+
+handle_event(#wx{event = #wxIconize{}}, State) ->
   {noreply, State, {continue, [redraw_radars]}};
 
 handle_event(#wx{event = #wxClose{}}, State) ->
