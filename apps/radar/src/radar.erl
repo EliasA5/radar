@@ -255,7 +255,8 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
              #state{click_info = #click_info{key = Key}} = State) ->
-  NewPos = {X1-20, Y1-20},
+  {W, H} = wxPanel:getSize(State#state.canvas),
+  NewPos = reclip(X1, Y1, {W, H}),
   try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, State#state.radars) of
     NewRadars ->
       {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
@@ -677,4 +678,10 @@ get_image_bitmap(Path, Angle) ->
 
 update_angle(Key, Angle) ->
   gen_server:call({global, ?SERVER}, {update_angle, Key, Angle}).
+
+reclip(X, Y, {W, H}) ->
+  F = fun(N, Min, Max) ->
+        max(Min, min(N, Max))
+      end,
+  {F(X, 0, W) - 25, F(Y, 0, H) - 20}.
 
