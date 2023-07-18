@@ -41,7 +41,8 @@
 }).
 
 -record(click_info, {
-          key
+          key,
+          selected
 }).
 
 -record(radar_info, {
@@ -176,11 +177,12 @@ init([]) ->
   wxPanel:connect(Canvas, size),
   wxPanel:connect(Canvas, left_down),
   wxPanel:connect(Canvas, right_down),
+  wxPanel:connect(Canvas, middle_down),
   {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
   wxFrame:show(Frame),
   {ok, #state{frame = Frame, canvas = Canvas,
               status_bar = StatusBar, status_bar_stats = #stats{},
-              click_info = #click_info{}, radars = #{}}}.
+              click_info = #click_info{selected = sets:new()}, radars = #{}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -193,14 +195,29 @@ init([]) ->
   {noreply, NewState :: term(), Timeout :: timeout()} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}},
+handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
   Bmp = get_image_bitmap("imgs/radar-drawing.jpeg"),
   NewRadars = Radars#{X => #radar_info{pos = {X-20, Y-20}, bitmap = Bmp}},
   {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
+handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
+  case find_object({X-20, Y-20}, State#state.radars) of
+    none ->
+      {noreply, State};
+    {SelectionKey, Object} ->
+      Env = wx:get_env(),
+      spawn(fun() ->
+                slider_dialog(Env, {-180, 180, Object#radar_info.angle},
+                              fun(Angle) ->
+                                  update_angle(SelectionKey, Angle)
+                              end, "Pick Radar Angle")
+            end),
+      {noreply, State}
+  end;
+
 handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
-             #state{radars = Radars, click_info = #click_info{key = SelectionKey}} = State) ->
+             #state{radars = Radars, click_info = #click_info{selected = Selected}} = State) ->
   Update_Radar_Bitmaps =
   fun
     (undefined, RadarsMap, _Path) ->
@@ -220,29 +237,26 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
   end,
   case find_object({X-20, Y-20}, Radars) of
     none ->
-      NewRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
-      {noreply, State#state{radars = NewRadars, click_info = #click_info{}}, {continue, [redraw_radars]}};
-    {SelectionKey, Object} ->
-      Env = wx:get_env(),
-      spawn(fun() ->
-                slider_dialog(Env, {-180, 180, Object#radar_info.angle},
-                              fun(Angle) ->
-                                  update_angle(SelectionKey, Angle)
-                              end, "Pick Radar Angle")
-            end),
-      {noreply, State};
+      NewRadars = sets:fold(fun(K, OldRadars) ->
+                                Update_Radar_Bitmaps(K, OldRadars, "imgs/radar-drawing.jpeg")
+                            end,
+                            Radars, Selected),
+      {noreply, State#state{radars = NewRadars,
+                            click_info = #click_info{selected = sets:new()}
+                           }, {continue, [redraw_radars]}};
     {Key, _Object} ->
-      MidRadars = Update_Radar_Bitmaps(SelectionKey, Radars, "imgs/radar-drawing.jpeg"),
-      NewRadars = Update_Radar_Bitmaps(Key, MidRadars, "imgs/radar-drawing-selected.jpeg"),
+      NewRadars = Update_Radar_Bitmaps(Key, Radars, "imgs/radar-drawing-selected.jpeg"),
       wxPanel:connect(State#state.canvas, motion),
       wxPanel:connect(State#state.canvas, left_up),
-      {noreply, State#state{radars = NewRadars, click_info = #click_info{key = Key}}, {continue, [redraw_radars]}}
+      {noreply, State#state{radars = NewRadars,
+                            click_info = #click_info{key = Key, selected = sets:add_element(Key, Selected)}
+                           }, {continue, [redraw_radars]}}
   end;
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
-             #state{radars = Radars, click_info = #click_info{key = Key}} = State) ->
+             #state{click_info = #click_info{key = Key}} = State) ->
   NewPos = {X1-20, Y1-20},
-  try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, Radars) of
+  try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, State#state.radars) of
     NewRadars ->
       {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
   catch
@@ -250,10 +264,10 @@ handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
       {noreply, State}
   end;
 
-handle_event(#wx{event = #wxMouse{type=left_up}}, State) ->
+handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo} = State) ->
   wxPanel:disconnect(State#state.canvas, motion),
   wxPanel:disconnect(State#state.canvas, left_up),
-  {noreply, State};
+  {noreply, State#state{click_info = ClickInfo#click_info{key = undefined}}};
 
 handle_event(#wx{event = #wxSize{}}, State) ->
   {noreply, State, {continue, [redraw_radars]}};
@@ -340,9 +354,9 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
                        fun(Info) ->
                            wxBitmap:destroy(Info#radar_info.bitmap),
-                           Path = case State#state.click_info#click_info.key of
-                                    Key -> "imgs/radar-drawing-selected.jpeg";
-                                    _ -> "imgs/radar-drawing.jpeg"
+                           Path = case sets:is_element(Key, State#state.click_info#click_info.selected) of
+                                    true -> "imgs/radar-drawing-selected.jpeg";
+                                    false -> "imgs/radar-drawing.jpeg"
                                   end,
                            Bmp = get_image_bitmap(Path, Angle),
                            Info#radar_info{bitmap = Bmp, angle = Angle}
@@ -635,14 +649,14 @@ redraw_radars(Canvas, Radars) ->
 
 draw(Canvas, Bitmap, Fun) ->
   MemoryDC = wxMemoryDC:new(Bitmap),
-  CDC = wxClientDC:new(Canvas),
+  CDC = wxPaintDC:new(Canvas),
 
   Fun(MemoryDC),
   wxDC:blit(CDC, {0,0},
             {wxBitmap:getWidth(Bitmap), wxBitmap:getHeight(Bitmap)},
             MemoryDC, {0,0}),
 
-  wxClientDC:destroy(CDC),
+  wxPaintDC:destroy(CDC),
   wxMemoryDC:destroy(MemoryDC).
 
 
