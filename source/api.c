@@ -110,14 +110,16 @@ int adc10_samples[16] = {0};
 unsigned char telem_deg = 0;
 void telemeter_s_enter()
 {
-	enable_t0timer(100);
+	enable_t0timer(10);
 	set_radar_deg(telem_deg);
+	enable_ultrasonic();
 	add_ack_tx_queue(MAKEACK(telemeter_s));
 }
 
 void telemeter_s_leave()
 {
-
+	disable_ultrasonic();
+	disable_t0timer();
 }
 
 int telemeter_s_handler()
@@ -154,6 +156,7 @@ void sonic_d_enter()
 {
 	enable_t0timer(10);
 	set_radar_deg(0);
+	set_max_radar_deg(60);
 	enable_ultrasonic();
 	add_ack_tx_queue(MAKEACK(sonic_d));
 }

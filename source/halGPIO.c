@@ -85,14 +85,13 @@ void enable_ultrasonic(void)
 void disable_ultrasonic(void)
 {
 	ultrasonic_prev_time = 0;
-	Timer1Ctl &= ~TAIE;
 	Timer1Cap_Ultra = 0;
 }
 
 void trigger_ultrasonic(void)
 {
 	UltrasonicPort |= UltrasonicPinTrig;
-	delay(11);
+	delay(20);
 	UltrasonicPort &= ~UltrasonicPinTrig;
 }
 
@@ -144,9 +143,9 @@ void enable_t0timer(unsigned char d)
 
 void disable_t0timer(void)
 {
+	set_timer_interrupt(0);
 	Timer0Ctl &= ~TAIE;
 	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
-	TA0CCR0 = 0;
 }
 
 void enterLPM(unsigned char LPM_level)
@@ -390,7 +389,9 @@ void TIMER0_A1_ISR (void)
 			switch(state)
 			{
 				case idle: break;
-				case telemeter_s: break;
+				case telemeter_s:
+					trigger_ultrasonic();
+				break;
 				case file_rec_s: break;
 				case sonic_d:
 					if((wakeup = update_degree()) != 0)
