@@ -27,8 +27,9 @@ void set_pwm_speed(unsigned int s)
 	TA1COMPARE1 = s >> 1;
 }
 
-// deg in [0,180]
+// deg in [0,60]
 static unsigned char current_radar_deg = 0;
+static unsigned char maximum_degree = 60;
 void set_radar_deg(unsigned char degree)
 {
 	current_radar_deg = degree;
@@ -37,9 +38,23 @@ void set_radar_deg(unsigned char degree)
 	TA1COMPARE1 = (25620 - ((degree << 3) + (degree << 1) + degree));
 }
 
+void set_max_radar_deg(unsigned char degree)
+{
+	maximum_degree = degree;
+}
+
 unsigned char get_radar_deg(void)
 {
 	return current_radar_deg;
+}
+
+unsigned char update_degree(void)
+{
+	unsigned char new_deg = current_radar_deg + 1;	
+	if(new_deg >= maximum_degree)
+		return 1;
+	set_radar_deg(new_deg);
+	return 0;
 }
 
 extern int adc10_samples[16];
@@ -64,8 +79,8 @@ static unsigned int ultrasonic_prev_time = 0;
 void enable_ultrasonic(void)
 {
 	ultrasonic_prev_time = 0;
-	Timer1Cap_Ultra = CM_3 + CAP + CCIE + CCIS_1; //capture mode CCIA1
-	Timer1Ctl |= TAIE;
+	Timer1Cap_Ultra = CM_3 + CAP + CCIE + CCIS_0 + SCS; //capture mode CCIB1
+	// Timer1Ctl |= TAIE;
 }
 void disable_ultrasonic(void)
 {
@@ -76,18 +91,19 @@ void disable_ultrasonic(void)
 
 void trigger_ultrasonic(void)
 {
-	UltrasonicPort |= UltrasonicPin;
+	UltrasonicPort |= UltrasonicPinTrig;
 	delay(11);
-	UltrasonicPort &= ~UltrasonicPin;
+	UltrasonicPort &= ~UltrasonicPinTrig;
 }
 
 void handle_ultrasonic(unsigned int time)
 {
 	if(ultrasonic_prev_time == 0){
 		ultrasonic_prev_time = time;
+		TA1R = 0;
 		return;
 	}
-	ultrasonic_prev_time = time - ultrasonic_prev_time;
+	ultrasonic_prev_time = time;
 	unsigned char msg[3];
 	msg[0] = MAKEULTRASONIC(get_radar_deg());
 	msg[1] = ((unsigned char *) &ultrasonic_prev_time)[0];
@@ -120,7 +136,7 @@ void write_flash(char *buf, char sz)
 
 void enable_t0timer(unsigned char d)
 {
-	TA0CCR0 = (((d << 3) + (d << 1)) << 3);
+	set_timer_interrupt(d);
 	TA0R = 0;
 	Timer0Ctl |= TAIE;
 	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
@@ -171,9 +187,9 @@ int file_rec_s_handler(unsigned char next);
 int sonic_d_handler();
 int ldr_d_handler();
 int dual_d_handler();
-int file_1_handler();
-int file_2_handler();
-int file_3_handler();
+int file_handler();
+
+extern struct file_manager fmanager;
 
 extern unsigned char telem_deg;
 extern unsigned char file_size;
@@ -362,6 +378,7 @@ void TIMER0_A1_ISR (void)
 #error Compiler not supported!
 #endif
 {
+	unsigned char wakeup = 0;
 	switch(__even_in_range(TA0IV,0x0A))
 	{
 	  case TA0IV_NONE: break;               // Vector  0:  No interrupt
@@ -375,15 +392,47 @@ void TIMER0_A1_ISR (void)
 				case idle: break;
 				case telemeter_s: break;
 				case file_rec_s: break;
-				case sonic_d: break;
+				case sonic_d:
+					if((wakeup = update_degree()) != 0)
+						goto wakeup;
+					trigger_ultrasonic();
+				break;
 				case ldr_d: break;
 				case dual_d: break;
+				case file_0: break;
 				case file_1: break;
 				case file_2: break;
-				case file_3: break;
 			}
 			break;
 	  default: break;
+	}
+
+wakeup:
+	if(wakeup == 0)
+		return;
+
+	disable_interrupts();
+	switch (lpm_mode)
+	{
+		case mode0:
+			LPM0_EXIT; // must be called from ISR only
+			break;
+
+		case mode1:
+			LPM1_EXIT; // must be called from ISR only
+			break;
+
+		case mode2:
+			LPM2_EXIT; // must be called from ISR only
+			break;
+
+		case mode3:
+			LPM3_EXIT; // must be called from ISR only
+			break;
+
+		case mode4:
+			LPM4_EXIT; // must be called from ISR only
+			break;
 	}
 }
 
@@ -402,9 +451,10 @@ void TIMER1_A1_ISR (void)
 	{
 		case TA1IV_NONE: break;               // Vector  0:  No interrupt
 		case TA1IV_TACCR1:                    // Vector  2:  TACCR1 CCIFG
-		    handle_ultrasonic(TA1CCR1);
 			break;
-		case TA1IV_TACCR2: break;             // Vector  4:  TACCR2 CCIFG
+		case TA1IV_TACCR2:              	  // Vector  4:  TACCR2 CCIFG
+		    handle_ultrasonic(TA1CCR2);
+		break;
 		case TA1IV_6: break;                  // Vector  6:  Reserved CCIFG
 		case TA1IV_8: break;                  // Vector  8:  Reserved CCIFG
 		case TA1IV_TAIFG: break;              // Vector 10:  TAIFG
@@ -434,9 +484,9 @@ void ADC10_ISR (void)
 		case sonic_d: break;
 		case ldr_d: break;
 		case dual_d: break;
+		case file_0: break;
 		case file_1: break;
 		case file_2: break;
-		case file_3: break;
 		default: break;
 	}
 }

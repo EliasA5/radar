@@ -16,6 +16,7 @@ int main(void) {
 	while (1) {
 		switch (state) {
 			case idle:
+				add_ack_tx_queue(MAKEACK(idle));
 				enable_interrupts();
 				enterLPM(lpm_mode);
 				break;

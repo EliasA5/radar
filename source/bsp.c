@@ -19,8 +19,17 @@ void GPIOconfig(void)
 	P1SEL |= BIT1 + BIT2;                     // RX and TX
 	P1SEL2 |= BIT1 + BIT2;
 
-	UltrasonicDir |= UltrasonicPin;          // UltraSonic Trigger Pin
-	UltrasonicSel &= ~UltrasonicPin;
+	// Ultrasonic Trigger
+	UltrasonicDir |= UltrasonicPinTrig;
+	UltrasonicSel &= ~UltrasonicPinTrig;
+
+	// Ultasonic Echo
+	UltrasonicDir &= ~UltrasonicPinEcho;
+	UltrasonicSel |= UltrasonicPinEcho;
+
+	// Servo pwm
+	ServoDir |= ServoPin;
+	ServoSel |= ServoPin;
 
 
 	// LEDs 8-bit Array Port configuration
@@ -48,7 +57,7 @@ void TIMERconfig(void)
 
 	Timer1Ctl = TASSEL_2 + MC_1;
 
-	//Timer1Cmp_Servo = OUTMOD_3  + CCIE; compare mode for Servo Motor when we need it
+	Timer1Cmp_Servo = OUTMOD_3; //compare mode for Servo Motor when we need it
 	//Timer1Cmp_Servo &= ~CCIFG;
 
 	//Timer1Cmp_Ultra = CCIE; compare mode with None mode depends on OUT value
