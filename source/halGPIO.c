@@ -75,39 +75,33 @@ void deactivate_ldr(void)
 	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
 }
 
-static unsigned int ultrasonic_prev_time = 0;
 void enable_ultrasonic(void)
 {
-	ultrasonic_prev_time = 0;
 	Timer1Cap_Ultra = CM_3 + CAP + CCIE + CCIS_0 + SCS; //capture mode CCIB1
 	// Timer1Ctl |= TAIE;
 }
 void disable_ultrasonic(void)
 {
-	ultrasonic_prev_time = 0;
 	Timer1Cap_Ultra = 0;
 }
 
 void trigger_ultrasonic(void)
 {
 	UltrasonicPort |= UltrasonicPinTrig;
-	delay(20);
+	delay(30);
 	UltrasonicPort &= ~UltrasonicPinTrig;
 }
 
 void handle_ultrasonic(unsigned int time)
 {
-	if(ultrasonic_prev_time == 0){
-		ultrasonic_prev_time = time;
-		TA1R = 0;
+	if((Timer1Cap_Ultra & CCI) != 0){
+		Timer1Ctl |= TACLR;
 		return;
 	}
-	ultrasonic_prev_time = time;
 	unsigned char msg[3];
 	msg[0] = MAKEULTRASONIC(get_radar_deg());
-	msg[1] = ((unsigned char *) &ultrasonic_prev_time)[0];
-	msg[2] = ((unsigned char *) &ultrasonic_prev_time)[1];
-	ultrasonic_prev_time = 0;
+	msg[1] = ((unsigned char *) &time)[0];
+	msg[2] = ((unsigned char *) &time)[1];
 	add_msg_tx_queue(msg, 3);
 }
 
@@ -137,7 +131,7 @@ void enable_t0timer(unsigned char d)
 {
 	set_timer_interrupt(d);
 	Timer0Ctl |= TAIE + TACLR;
-	Timer0Ctl |= ID_1;
+	Timer0Ctl |= ID_1 + MC_3;
 	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
 }
 
@@ -146,6 +140,7 @@ void disable_t0timer(void)
 	// set_timer_interrupt(0);
 	Timer0Ctl &= ~(TAIE + TAIFG);
 	Timer0Ctl |= TACLR;
+	Timer0Ctl &= ~MC_3;
 }
 
 void enterLPM(unsigned char LPM_level)

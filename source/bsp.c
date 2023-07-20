@@ -57,11 +57,11 @@ void TIMERconfig(void)
 
 	Timer1Ctl = TASSEL_2 + MC_1;
 
-	Timer1Cmp_Servo = OUTMOD_3; //compare mode for Servo Motor when we need it
+	Timer1Cmp_Servo = OUTMOD_3;
 	//Timer1Cmp_Servo &= ~CCIFG;
 
-	//Timer1Cmp_Ultra = CCIE; compare mode with None mode depends on OUT value
 	//Timer1Cap_Ultra = CM_3 + CAP + CCIE; capture mode CCIA2
+	Timer1Cap_Ultra = 0;
 
 	Timer1Ctl &= ~TAIFG;
 }
