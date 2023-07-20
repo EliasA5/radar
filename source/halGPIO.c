@@ -136,16 +136,16 @@ void write_flash(char *buf, char sz)
 void enable_t0timer(unsigned char d)
 {
 	set_timer_interrupt(d);
-	TA0R = 0;
-	Timer0Ctl |= TAIE;
+	Timer0Ctl |= TAIE + TACLR;
+	Timer0Ctl |= ID_1;
 	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
 }
 
 void disable_t0timer(void)
 {
-	set_timer_interrupt(0);
-	Timer0Ctl &= ~TAIE;
-	Timer0Ctl &= ~TAIFG; // Clear  Timer Flag
+	// set_timer_interrupt(0);
+	Timer0Ctl &= ~(TAIE + TAIFG);
+	Timer0Ctl |= TACLR;
 }
 
 void enterLPM(unsigned char LPM_level)
