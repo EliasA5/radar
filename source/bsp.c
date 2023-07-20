@@ -68,8 +68,8 @@ void TIMERconfig(void)
 
 void ADCconfig(void)
 {
-	ADCLDRCtl0 = SREF_0 + ADC10SHT_2 + MSC;
-	ADCLDRCtl1 = INCH_3 + ADC10SSEL_1 + CONSEQ_3 + ADC10DIV_7;
+	ADCLDRCtl0 = SREF_0 + ADC10SHT_0 + MSC;
+	ADCLDRCtl1 = INCH_3 + ADC10SSEL_1 + CONSEQ_3 + ADC10DIV_0;
 	ADC10AE0 = 0x09; // Enable A3 + A0 Analog input
 }
 

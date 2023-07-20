@@ -75,6 +75,14 @@ void deactivate_ldr(void)
 	ADCLDRCtl0 &= ~(ADC10ON + ENC + ADC10IE + ADC10SC);
 }
 
+void trigger_ldr(void)
+{
+	ADCLDRCtl0 &= ~(ENC);
+	if((ADCLDRCtl1 & ADC10BUSY) != 0)
+		return;
+	ADCLDRCtl0 |= ADC10SC + ENC;
+}
+
 void enable_ultrasonic(void)
 {
 	Timer1Cap_Ultra = CM_3 + CAP + CCIE + CCIS_0 + SCS; //capture mode CCIB1
@@ -393,7 +401,11 @@ void TIMER0_A1_ISR (void)
 						goto wakeup;
 					trigger_ultrasonic();
 				break;
-				case ldr_d: break;
+				case ldr_d:
+					if((wakeup = update_degree()) != 0)
+						goto wakeup;
+					trigger_ldr();
+				break;
 				case dual_d: break;
 				case file_0: break;
 				case file_1: break;
@@ -458,7 +470,7 @@ void TIMER1_A1_ISR (void)
 	}
 }
 
-void ADC10_handler(void);
+void ADC10_handler(int a0, int a3);
 // ADC10 Interrupt vector
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector = ADC10_VECTOR
@@ -471,7 +483,8 @@ void ADC10_ISR (void)
 {
 	int a3 = adc10_samples[0] + adc10_samples[4] + adc10_samples[8] + adc10_samples[12];
 	int a0 = adc10_samples[3] + adc10_samples[7] + adc10_samples[11] + adc10_samples[15];
-	ADC10_handler();
+	ADC10_handler(a0, a3);
+	ADC10SA  =    adc10_samples;
 	switch(state)
 	{
 		case idle: break;

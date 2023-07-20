@@ -5,7 +5,7 @@ extern void printSWs2LEDs(void);
 extern void printArr2SWs(char Arr[], int size, unsigned int rate);
 extern void printCharArr2SWs(char Arr[], int size, unsigned int rate);
 
-extern void ADC10_handler(void);
+extern void ADC10_handler(int a0, int a3);
 extern char *print_int(unsigned int x);
 extern char *print_qformat_2_8(unsigned int x);
 

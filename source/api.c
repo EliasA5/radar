@@ -176,13 +176,18 @@ int sonic_d_handler()
 
 void ldr_d_enter()
 {
+	enable_t0timer(10);
+	set_radar_deg(0);
+	set_max_radar_deg(60);
 	activate_ldr();
 	add_ack_tx_queue(MAKEACK(ldr_d));
 }
 
 void ldr_d_leave()
 {
+	set_radar_deg(0);
 	deactivate_ldr();
+	disable_t0timer();
 }
 
 int ldr_d_handler()
@@ -207,9 +212,13 @@ int dual_d_handler()
 	return 0;
 }
 
-void ADC10_handler()
+void ADC10_handler(int a0, int a3)
 {
-
+	unsigned char sample = (a0 + a3) >> 5;
+	unsigned char msg[2];
+	msg[0] = MAKELDR(get_radar_deg());
+	msg[1] = sample;
+	add_msg_tx_queue(msg, 2);
 }
 
 void file_enter()
