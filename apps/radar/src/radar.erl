@@ -42,6 +42,7 @@
 
 -record(click_info, {
           key,
+          offset = {0, 0},
           selected
 }).
 
@@ -65,6 +66,9 @@
 
 -define(RADAR_DRAWING, "imgs/radar-normal.png").
 -define(RADAR_DRAWING_SELECTED, "imgs/radar-selected.png").
+
+-define(BITMAP_WIDTH, 25).
+-define(BITMAP_HEIGHT, 20).
 
 %%%===================================================================
 %%% API
@@ -256,14 +260,16 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
       NewRadars = Update_Radar_Bitmaps(Key, Radars, ?RADAR_DRAWING_SELECTED),
       wxPanel:connect(State#state.canvas, motion),
       wxPanel:connect(State#state.canvas, left_up),
+      {X0, Y0} = _Object#radar_info.pos,
+      NewOffset = {X - X0 - ?BITMAP_WIDTH, Y - Y0 - ?BITMAP_HEIGHT},
       {noreply, State#state{radars = NewRadars,
-                            click_info = #click_info{key = Key, selected = sets:add_element(Key, Selected)}
+                            click_info = #click_info{key = Key, offset = NewOffset, selected = sets:add_element(Key, Selected)}
                            }, {continue, [redraw_radars]}}
   end;
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
-             #state{click_info = #click_info{key = Key}} = State) ->
-  NewPos = reclip(X1, Y1, wxPanel:getSize(State#state.canvas)),
+             #state{click_info = #click_info{key = Key, offset = {Dx, Dy}}} = State) ->
+  NewPos = reclip(X1-Dx, Y1-Dy, wxPanel:getSize(State#state.canvas)),
   try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, State#state.radars) of
     NewRadars ->
       {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
@@ -275,7 +281,7 @@ handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
 handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo} = State) ->
   wxPanel:disconnect(State#state.canvas, motion),
   wxPanel:disconnect(State#state.canvas, left_up),
-  {noreply, State#state{click_info = ClickInfo#click_info{key = undefined}}};
+  {noreply, State#state{click_info = ClickInfo#click_info{key = undefined, offset = {0, 0}}}};
 
 handle_event(#wx{event = #wxSize{}}, State) ->
   {noreply, State, {continue, [redraw_radars]}};
@@ -677,9 +683,9 @@ get_image_bitmap(Path) ->
 get_image_bitmap(Path, Angle) ->
   Rads = -Angle / 180 * math:pi(),
   Image = wxImage:new(Path),
-  Image2 = wxImage:scale(Image, 50, 40, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+  Image2 = wxImage:scale(Image, ?BITMAP_WIDTH*2, ?BITMAP_HEIGHT*2, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
   wxImage:setMaskColour(Image2, 255, 255, 255),
-  Image3 = wxImage:rotate(Image2, Rads, {20,20}, [{interpolating, true}]),
+  Image3 = wxImage:rotate(Image2, Rads, {?BITMAP_WIDTH, ?BITMAP_HEIGHT}, [{interpolating, true}]),
   Bmp = wxBitmap:new(Image3),
   wxImage:destroy(Image),
   wxImage:destroy(Image2),
@@ -693,5 +699,5 @@ reclip(X, Y, {W, H}) ->
   F = fun(N, Min, Max) ->
         max(Min, min(N, Max))
       end,
-  {F(X, 0, W) - 25, F(Y, 0, H) - 20}.
+  {F(X, 0, W) - ?BITMAP_WIDTH, F(Y, 0, H) - ?BITMAP_HEIGHT}.
 
