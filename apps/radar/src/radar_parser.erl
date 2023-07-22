@@ -81,8 +81,8 @@ make_parsers() ->
                                    {"rra_lcd", 3, 1, fun mapper_1/2},
                                    {"set_delay", 4, 1, fun mapper_1/2},
                                    {"clear_lcd", 5, 0, fun mapper_0/1},
-                                   {"servo_deg", 6, 1, fun mapper_1/2},
-                                   {"servo_scan", 7, 2, fun first_smaller/3},
+                                   {"servo_deg", 6, 1, fun angle_mapper/2},
+                                   {"servo_scan", 7, 2, fun first_smaller_deg/3},
                                    {"sleep", 8, 0, fun mapper_0/1}]
   ].
 
@@ -104,13 +104,25 @@ mapper_0(Opcode) ->
 mapper_1(Opcode, Arg1) ->
   <<Opcode:8, (list_to_integer(Arg1)):8>>.
 
-first_smaller(Opcode, Arg1, Arg2) ->
+angle_mapper(Opcode, Angle) ->
+  case list_to_integer(Angle) of
+    Ang when Ang < 0 orelse Ang > 180 ->
+      nomatch;
+    Ang ->
+      <<Opcode:8, Ang:8>>
+  end.
+
+first_smaller_deg(Opcode, Arg1, Arg2) ->
   Num1 = list_to_integer(Arg1),
   Num2 = list_to_integer(Arg2),
-  case Num1 < Num2 of
-    true ->
-      <<Opcode:8, Num1:8, Num2:8>>;
-    false ->
-      nomatch
+  case {Num1, Num2} of
+    {_,_} when Num1 < 0 orelse
+               Num1 > 180 orelse
+               Num2 < 0 orelse
+               Num2 > 180 orelse
+               Num1 >= Num2 ->
+      nomatch;
+    _ ->
+      <<Opcode:8, Num1:8, Num2:8>>
   end.
 
