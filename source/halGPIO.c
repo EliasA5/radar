@@ -245,27 +245,30 @@ void USCI0RX_ISR (void)
 					wakeup = 1;
 					break;
 				case file_0:
-					if(state != do_file || fmanager.curr_file != 0)
+					if(state != do_file || fmanager.curr_file != 0){
+						fmanager.first_enter = 1;
 						fmanager.file[0] = FILE0PTR;
+					}
 					state = do_file;
 					fmanager.curr_file = 0;
-					fmanager.first_enter = 1;
 					wakeup = 1;
 					break;
 				case file_1:
-					if(state != do_file || fmanager.curr_file != 1)
+					if(state != do_file || fmanager.curr_file != 1){
+						fmanager.first_enter = 1;
 						fmanager.file[1] = FILE1PTR;
+					}
 					state = do_file;
 					fmanager.curr_file = 1;
-					fmanager.first_enter = 1;
 					wakeup = 1;
 					break;
 				case file_2:
-					if(state != do_file || fmanager.curr_file != 2)
+					if(state != do_file || fmanager.curr_file != 2){
+						fmanager.first_enter = 1;
 						fmanager.file[2] = FILE2PTR;
+					}
 					state = do_file;
 					fmanager.curr_file = 2;
-					fmanager.first_enter = 1;
 					wakeup = 1;
 					break;
 				default:
