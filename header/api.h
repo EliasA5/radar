@@ -7,6 +7,7 @@ extern void printCharArr2SWs(char Arr[], int size, unsigned int rate);
 
 extern void ADC10_handler(int a0, int a3);
 extern char *print_int(unsigned int x);
+extern char *print_uchar(unsigned char x);
 extern char *print_qformat_2_8(unsigned int x);
 
 extern void telemeter_s_enter();

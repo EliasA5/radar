@@ -21,6 +21,22 @@ char *print_int(unsigned int x)
 	return &buf[found];
 }
 
+char *print_uchar(uchar x)
+{
+	unsigned int bases[] = {100, 10, 1};
+	static char buf[4];
+	int i = 0,k,j,found = -1;
+	x++;
+	for(k = 0; k < sizeof(bases)/sizeof(unsigned int); k++){
+		for(j = 0; x > bases[k]; x -= bases[k], j++);
+		if(found == -1 && j)
+			found = i;
+		buf[i++] = digits[j];
+	}
+	if(found == -1)
+		found = 4;
+	return &buf[found];
+}
 
 // we use qformat q2.8 on the output of the adc
 char *print_qformat_2_8(unsigned int x)
@@ -51,25 +67,49 @@ char *print_qformat_2_8(unsigned int x)
 	return buf;
 }
 
-static unsigned int lcd_max = 0;
+static uchar lcd_max = 0;
+static uchar lcd_curr = 0;
+static void inc_lcd_enter(uchar max)
+{
+	lcd_max = max;	
+	lcd_curr = 0;
+	lcd_clear();
+}
+
+static void inc_lcd_leave()
+{
+	lcd_clear();
+}
+
 int inc_lcd()
 {
-	static unsigned int x = 0;
 	lcd_clear();
-	lcd_puts(print_int(x));
-	x++;
-	if(x >= lcd_max){
-		x = 0;
+	lcd_puts(print_uchar(lcd_curr));
+	lcd_curr++;
+	if(lcd_curr >= lcd_max){
+		lcd_curr = 0;
 		return 1;
 	}
 	return 0;
 }
 
-static unsigned int lcd_dec_x = 0;
+
+static uchar lcd_dec_x = 0;
+static void dec_lcd_enter(uchar lcd_dec_num)
+{
+	lcd_dec_x = lcd_dec_num;
+	lcd_clear();
+}
+
+static void dec_lcd_leave()
+{
+	lcd_clear();
+}
+
 int dec_lcd()
 {
 	lcd_clear();
-	lcd_puts(print_int(lcd_dec_x));
+	lcd_puts(print_uchar(lcd_dec_x));
 	lcd_dec_x--;
 	if(lcd_dec_x == 0)
 		return 1;
@@ -77,9 +117,24 @@ int dec_lcd()
 }
 
 unsigned char rra_char = '\0';
+static int lcd_index = 0;
+
+static void rra_lcd_enter(uchar c)
+{
+	rra_char = c;
+	lcd_clear();
+	lcd_index = 0;
+}
+
+static void rra_lcd_leave()
+{
+	rra_char = '\0';
+	lcd_clear();
+	lcd_index = 0;
+}
+
 int rra_lcd()
 {
-	static int lcd_index = 0;
 	if(lcd_index == 0){
 		lcd_putchar(rra_char);
 		goto ret;
@@ -230,18 +285,150 @@ void ADC10_handler(int a0, int a3)
 	add_msg_tx_queue(msg, 2);
 }
 
+extern struct file_manager fmanager;
 void file_enter()
 {
-	add_ack_tx_queue(MAKEACK(file_1));
+	uchar sleep = 0;
+	if(fmanager.first_enter){
+		fmanager.d = 50;
+		fmanager.first_enter = 0;
+		add_ack_tx_queue(MAKEACK(do_file + fmanager.curr_file));
+	}
+
+	if(fmanager.valid[fmanager.curr_file] == 0){
+		state = idle;
+		return;
+	}
+
+	uchar arg1 = (*(fmanager.file[fmanager.curr_file] + 1));
+	uchar arg2 = (*(fmanager.file[fmanager.curr_file] + 2));
+	switch(*fmanager.file[fmanager.curr_file])
+	{
+		case 0: // end of file
+			// TODO deal with end of file
+			break;
+		case 1:
+			enable_t0timer(fmanager.d);
+			inc_lcd_enter(arg1);
+			break;
+		case 2:
+			enable_t0timer(fmanager.d);
+			dec_lcd_enter(arg1);
+			break;
+		case 3:
+			enable_t0timer(fmanager.d);
+			rra_lcd_enter(arg1);
+			break;
+		case 4:
+			fmanager.d = arg1;
+			break;
+		case 5:
+			lcd_clear();
+			break;
+		case 6:
+            enable_t0timer(fmanager.d);
+            set_radar_deg(arg1);
+            enable_ultrasonic();
+            break;
+		case 7:
+			enable_t0timer(fmanager.d);
+			set_radar_deg(arg1);
+			set_max_radar_deg(arg2);
+			enable_ultrasonic();
+			break;
+		case 8:
+
+			break;
+	}
+
+	if(sleep)
+		enterLPM(lpm_mode);
 }
 
 void file_leave()
 {
-
+	uchar arg1 = (*(fmanager.file[fmanager.curr_file] + 1));
+	uchar arg2 = (*(fmanager.file[fmanager.curr_file] + 2));
+	switch(*fmanager.file[fmanager.curr_file])
+	{
+		case 1:
+			inc_lcd_leave();
+			fmanager.curr_file += 2;
+			break;
+		case 2:
+			dec_lcd_leave();
+			fmanager.curr_file += 2;
+			break;
+		case 3:
+			rra_lcd_leave();
+			fmanager.curr_file += 2;
+			break;
+		case 4:
+			fmanager.curr_file += 2;
+			break;
+		case 5:
+			fmanager.curr_file += 1;
+			break;
+		case 6:
+			disable_ultrasonic();
+			disable_t0timer();
+			fmanager.curr_file += 2;
+			break;
+		case 7:
+			disable_ultrasonic();
+			disable_t0timer();
+			fmanager.curr_file += 3;
+			break;
+		case 8:
+			state = idle;
+			break;
+		default:
+			state = idle;
+			break;
+	}
 }
 
 int file_handler()
 {
+	static uchar servo_deg_counter = 0;
+	uchar wakeup = 0;
+	switch(*fmanager.file[fmanager.curr_file] == 0)
+	{
+		case 1:
+			wakeup = inc_lcd();
+			break;
+		case 2:
+			wakeup = dec_lcd();
+			break;
+		case 3:
+			wakeup = rra_lcd();
+			break;
+		case 4:
+			
+			break;
+		case 5:
 
-	return 0;
+			break;
+		case 6:
+			if((++servo_deg_counter) >= 10){
+				servo_deg_counter = 0;
+				wakeup = 1;
+				break;
+			}
+			trigger_ultrasonic();
+			break;
+		case 7:
+			if((wakeup = update_degree()) != 0)
+				break;
+			trigger_ultrasonic();
+			break;
+		case 8:
+
+			break;
+		default:
+			wakeup = 1;
+			break;
+	}
+
+	return wakeup;
 }

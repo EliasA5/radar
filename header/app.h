@@ -15,9 +15,11 @@ enum SYSmode{mode0,mode1,mode2,mode3,mode4}; // global variable
 
 struct file_manager{
 	uchar curr_file;
-	uchar *file_curr[3];
+	uchar *file[3];
 	uchar valid[3];
 	uchar file_to_replace;
+	uchar first_enter;
+	uchar d;
 };
 
 #define MAKEACK(opcode) (0xc0 | (opcode))

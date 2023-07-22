@@ -58,7 +58,6 @@ int main(void) {
 
 			case do_file:
 				file_enter();
-				enterLPM(lpm_mode);
 				file_leave();
 				break;
 		}
