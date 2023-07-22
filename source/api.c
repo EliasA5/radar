@@ -198,12 +198,21 @@ int ldr_d_handler()
 
 void dual_d_enter()
 {
+	enable_t0timer(10);
+	set_radar_deg(0);
+	set_max_radar_deg(60);
+	activate_ldr();
+	enable_ultrasonic();
 	add_ack_tx_queue(MAKEACK(dual_d));
+
 }
 
 void dual_d_leave()
 {
-
+	set_radar_deg(0);
+	deactivate_ldr();
+	disable_ultrasonic();
+	disable_t0timer();
 }
 
 int dual_d_handler()

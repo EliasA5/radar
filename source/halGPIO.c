@@ -406,10 +406,15 @@ void TIMER0_A1_ISR (void)
 						goto wakeup;
 					trigger_ldr();
 				break;
-				case dual_d: break;
-				case file_0: break;
-				case file_1: break;
-				case file_2: break;
+				case dual_d:
+					if((wakeup = update_degree()) != 0)
+						goto wakeup;
+					trigger_ultrasonic();
+					trigger_ldr();
+				break;
+				case do_file:
+					wakeup = file_handler();
+					break;
 			}
 			break;
 	  default: break;
