@@ -179,7 +179,7 @@ void telemeter_s_leave()
 
 int telemeter_s_handler()
 {
-
+	trigger_ultrasonic();
 	return 0;
 }
 
@@ -225,8 +225,8 @@ void sonic_d_leave()
 
 int sonic_d_handler()
 {
-	
-	return 0;
+    trigger_ultrasonic();
+    return update_degree();
 }
 
 void ldr_d_enter()
@@ -247,8 +247,8 @@ void ldr_d_leave()
 
 int ldr_d_handler()
 {
-
-	return 0;
+	trigger_ldr();
+	return update_degree();
 }
 
 void dual_d_enter()
@@ -272,8 +272,9 @@ void dual_d_leave()
 
 int dual_d_handler()
 {
-
-	return 0;
+	trigger_ultrasonic();
+	trigger_ldr();
+	return update_degree();
 }
 
 void ADC10_handler(int a0, int a3)

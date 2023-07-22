@@ -399,25 +399,18 @@ void TIMER0_A1_ISR (void)
 			{
 				case idle: break;
 				case telemeter_s:
-					trigger_ultrasonic();
-				break;
+					wakeup = telemeter_s_handler();
+					break;
 				case file_rec_s: break;
 				case sonic_d:
-					if((wakeup = update_degree()) != 0)
-						goto wakeup;
-					trigger_ultrasonic();
-				break;
+					wakeup = sonic_d_handler();
+					break;
 				case ldr_d:
-					if((wakeup = update_degree()) != 0)
-						goto wakeup;
-					trigger_ldr();
-				break;
+					wakeup = ldr_d_handler();
+					break;
 				case dual_d:
-					if((wakeup = update_degree()) != 0)
-						goto wakeup;
-					trigger_ultrasonic();
-					trigger_ldr();
-				break;
+					wakeup = dual_d_handler();
+					break;
 				case do_file:
 					wakeup = file_handler();
 					break;
