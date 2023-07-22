@@ -165,16 +165,16 @@ int adc10_samples[16] = {0};
 unsigned char telem_deg = 0;
 void telemeter_s_enter()
 {
-	enable_t0timer(10);
 	set_radar_deg(telem_deg);
 	enable_ultrasonic();
+	enable_t0timer(10);
 	add_ack_tx_queue(MAKEACK(telemeter_s));
 }
 
 void telemeter_s_leave()
 {
-	disable_ultrasonic();
 	disable_t0timer();
+	disable_ultrasonic();
 }
 
 int telemeter_s_handler()
@@ -209,18 +209,18 @@ int file_rec_s_handler(unsigned char next)
 
 void sonic_d_enter()
 {
-	enable_t0timer(10);
 	set_radar_deg(0);
 	set_max_radar_deg(60);
 	enable_ultrasonic();
+	enable_t0timer(10);
 	add_ack_tx_queue(MAKEACK(sonic_d));
 }
 
 void sonic_d_leave()
 {
+	disable_t0timer();
 	set_radar_deg(0);
 	disable_ultrasonic();
-	disable_t0timer();
 }
 
 int sonic_d_handler()
@@ -231,18 +231,18 @@ int sonic_d_handler()
 
 void ldr_d_enter()
 {
-	enable_t0timer(10);
 	set_radar_deg(0);
 	set_max_radar_deg(60);
 	activate_ldr();
+	enable_t0timer(10);
 	add_ack_tx_queue(MAKEACK(ldr_d));
 }
 
 void ldr_d_leave()
 {
+	disable_t0timer();
 	set_radar_deg(0);
 	deactivate_ldr();
-	disable_t0timer();
 }
 
 int ldr_d_handler()
@@ -253,21 +253,21 @@ int ldr_d_handler()
 
 void dual_d_enter()
 {
-	enable_t0timer(10);
 	set_radar_deg(0);
 	set_max_radar_deg(60);
 	activate_ldr();
 	enable_ultrasonic();
+	enable_t0timer(10);
 	add_ack_tx_queue(MAKEACK(dual_d));
 
 }
 
 void dual_d_leave()
 {
+	disable_t0timer();
 	set_radar_deg(0);
 	deactivate_ldr();
 	disable_ultrasonic();
-	disable_t0timer();
 }
 
 int dual_d_handler()
@@ -308,16 +308,16 @@ void file_enter()
 			// TODO deal with end of file
 			break;
 		case 1:
-			enable_t0timer(fmanager.d);
 			inc_lcd_enter(arg1);
+			enable_t0timer(fmanager.d);
 			break;
 		case 2:
-			enable_t0timer(fmanager.d);
 			dec_lcd_enter(arg1);
+			enable_t0timer(fmanager.d);
 			break;
 		case 3:
-			enable_t0timer(fmanager.d);
 			rra_lcd_enter(arg1);
+			enable_t0timer(fmanager.d);
 			break;
 		case 4:
 			fmanager.d = arg1;
@@ -326,15 +326,15 @@ void file_enter()
 			lcd_clear();
 			break;
 		case 6:
-            enable_t0timer(fmanager.d);
             set_radar_deg(arg1);
             enable_ultrasonic();
+            enable_t0timer(fmanager.d);
             break;
 		case 7:
-			enable_t0timer(fmanager.d);
 			set_radar_deg(arg1);
 			set_max_radar_deg(arg2);
 			enable_ultrasonic();
+			enable_t0timer(fmanager.d);
 			break;
 		case 8:
 
@@ -352,14 +352,17 @@ void file_leave()
 	switch(*fmanager.file[fmanager.curr_file])
 	{
 		case 1:
+			disable_t0timer();
 			inc_lcd_leave();
 			fmanager.curr_file += 2;
 			break;
 		case 2:
+			disable_t0timer();
 			dec_lcd_leave();
 			fmanager.curr_file += 2;
 			break;
 		case 3:
+			disable_t0timer();
 			rra_lcd_leave();
 			fmanager.curr_file += 2;
 			break;
@@ -370,13 +373,13 @@ void file_leave()
 			fmanager.curr_file += 1;
 			break;
 		case 6:
-			disable_ultrasonic();
 			disable_t0timer();
+			disable_ultrasonic();
 			fmanager.curr_file += 2;
 			break;
 		case 7:
-			disable_ultrasonic();
 			disable_t0timer();
+			disable_ultrasonic();
 			fmanager.curr_file += 3;
 			break;
 		case 8:
