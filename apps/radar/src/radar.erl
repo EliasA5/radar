@@ -646,15 +646,15 @@ pred_on_iter(Fun, Iter) ->
 
 is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
   case {X - X0, Y - Y0} of
-    {Xdiff, Ydiff} when Xdiff >= -20 andalso Xdiff =< 20 andalso Ydiff >= -20 andalso Ydiff =< 20 ->
+    {Xdiff, Ydiff} when Xdiff >= -?BITMAP_WIDTH andalso Xdiff =< ?BITMAP_WIDTH andalso Ydiff >= -?BITMAP_HEIGHT andalso Ydiff =< ?BITMAP_HEIGHT ->
       true;
     _ ->
       false
   end.
 
 redraw_radars(Canvas, Radars) ->
-  {W,H} = wxPanel:getSize(Canvas),
-  Bitmap = wxBitmap:new(erlang:max(W,30),erlang:max(30,H)),
+  {W, H} = wxPanel:getSize(Canvas),
+  Bitmap = wxBitmap:new(W, H),
   Fun = fun(DC) ->
             wxDC:clear(DC),
             maps:foreach(fun(_, #radar_info{pos = Pos, bitmap = Bmp}) ->
