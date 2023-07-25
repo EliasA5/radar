@@ -96,6 +96,8 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec connect_radar(Node :: node(), Pid :: pid()) -> ok.
 
+connect_radar(nonode@nohost, _Pid) ->
+  ok;
 connect_radar(Node, Pid) ->
   gen_server:call({global, ?SERVER}, {connect_radar, Node, Pid}).
 
@@ -106,6 +108,8 @@ connect_radar(Node, Pid) ->
 %%--------------------------------------------------------------------
 -spec disconnect_radar(Node :: node(), Pid :: pid()) -> ok.
 
+disconnect_radar(nonode@nohost, _Pid) ->
+  ok;
 disconnect_radar(Node, Pid) ->
   gen_server:call({global, ?SERVER}, {disconnect_radar, Node, Pid}).
 
@@ -118,6 +122,8 @@ disconnect_radar(Node, Pid) ->
 %%--------------------------------------------------------------------
 -spec reconnect_operator(Node :: node()) -> ok.
 
+reconnect_operator(nonode@nohost) ->
+  ok;
 reconnect_operator(Node) ->
   gen_server:call({global, ?SERVER}, {reconnect_operator, Node}).
 
@@ -419,8 +425,12 @@ handle_call({disconnect_radar, _Node, Pid}, _From, State) ->
   end;
 
 handle_call({reconnect_operator, Node}, _From, State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{node = INode}) ->
-                              INode /= Node
+  NewRadars = maps:filter(fun(_Key, #radar_info{bitmap = Bitmap, node = INode}) ->
+                              case INode of
+                                Node ->
+                                  wxBitmap:destroy(Bitmap), false;
+                                _ -> true
+                                end
                           end, State#state.radars),
   {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
@@ -485,8 +495,11 @@ handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
 handle_info({nodedown, Node}, State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{node = INode}) ->
-                              INode /= Node
+  NewRadars = maps:filter(fun(_Key, #radar_info{bitmap = Bitmap, node = INode}) ->
+                              case INode of
+                                Node -> wxBitmap:destroy(Bitmap), false;
+                                _ -> true
+                                end
                           end, State#state.radars),
   {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
@@ -599,7 +612,6 @@ slider_dialog(Env, {Low, High, Def}, Callback, Title) ->
   case wxDialog:showModal(SliderDialog) of
     ?wxID_OK ->
       Angle = wxSlider:getValue(Slider),
-      % TODO add callback
       Callback(Angle);
     ?wxID_CANCEL ->
       ok
@@ -622,7 +634,6 @@ send_file_dialog(Env, Callback, Title) ->
                                 ]),
   case wxFileDialog:showModal(FileDialog) of
     ?wxID_OK ->
-      % TODO implement functionality
       FilePath = wxFileDialog:getPath(FileDialog),
       Callback(FilePath);
     ?wxID_CANCEL ->
