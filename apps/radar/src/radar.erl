@@ -172,6 +172,7 @@ init([]) ->
   Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxStatusBar:setFont(StatusBar, Font),
+  wxFont:destroy(Font),
   ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
 
   ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
@@ -524,7 +525,7 @@ handle_info(_Info, State) ->
 handle_continue(Continue, State) when is_list(Continue) ->
   case lists:member(redraw_radars, Continue) of
     true ->
-      redraw_radars(State#state.canvas, State#state.radars);
+      redraw_radars(State#state.canvas, State#state.radars, State#state.click_info#click_info.selected);
     false ->
       ok
   end,
@@ -653,7 +654,7 @@ stats_dialog(Env, Stats) ->
   Font = wxFont:new(9, ?wxFONTFAMILY_DEFAULT, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxListCtrl:setFont(StatsDialog, Font),
-
+  wxFont:destroy(Font),
   ListCtrl = wxListCtrl:new(StatsDialog, [
                                           {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL bor ?wxLC_VRULES}
                                          ]),
@@ -726,13 +727,27 @@ is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
       false
   end.
 
-redraw_radars(Canvas, Radars) ->
+redraw_radars(Canvas, Radars, Selected) ->
   {W, H} = wxPanel:getSize(Canvas),
   Bitmap = wxBitmap:new(W, H),
   Fun = fun(DC) ->
             wxDC:clear(DC),
-            maps:foreach(fun(_, #radar_info{pos = Pos, bitmap = Bmp}) ->
-                             wxDC:drawBitmap(DC, Bmp, Pos)
+            Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
+                              ?wxFONTWEIGHT_EXTRABOLD),
+            wxDC:setFont(DC, Font),
+            wxFont:destroy(Font),
+            maps:foreach(fun
+                           (Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, bitmap = Bmp, node = Node})->
+                              case sets:is_element(Key, Selected) of
+                                true ->
+                                  PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
+                                  LastText = io_lib:format("~p", [Angle]),
+                                  FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
+                                  wxDC:drawBitmap(DC, Bmp, Pos),
+                                  wxDC:drawLabel(DC, FinalText,
+                                  {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]);
+                                false -> wxDC:drawBitmap(DC, Bmp, Pos)
+                              end
                          end, Radars)
         end,
   draw(Canvas, Bitmap, Fun),
