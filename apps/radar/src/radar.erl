@@ -19,6 +19,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          handle_continue/2, terminate/2, code_change/3, format_status/2]).
 
+-export([connect_radar/2, disconnect_radar/2, reconnect_operator/1]).
+
 %% internal usage
 -export([]).
 
@@ -87,6 +89,38 @@
 start_link() ->
   gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Connects a new radar with Pid from Node
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_radar(Node :: node(), Pid :: pid()) -> ok.
+
+connect_radar(Node, Pid) ->
+  gen_server:call({global, ?SERVER}, {connect_radar, Node, Pid}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Disconnects a new radar with Pid from Node
+%% @end
+%%--------------------------------------------------------------------
+-spec disconnect_radar(Node :: node(), Pid :: pid()) -> ok.
+
+disconnect_radar(Node, Pid) ->
+  gen_server:call({global, ?SERVER}, {disconnect_radar, Node, Pid}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all radars that come from node Node
+%% Used for when the operator crashes, and needs to resend all the
+%% open communication ports
+%% @end
+%%--------------------------------------------------------------------
+-spec reconnect_operator(Node :: node()) -> ok.
+
+reconnect_operator(Node) ->
+  gen_server:call({global, ?SERVER}, {reconnect_operator, Node}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -117,6 +151,7 @@ start_link() ->
 %%
 init([]) ->
   process_flag(trap_exit, true),
+  net_kernel:monitor_nodes(true),
   wx:new(),
   Frame = wxFrame:new(wx:null(), 1, "Radar"),
   % spawn windows
@@ -366,6 +401,28 @@ handle_event(#wx{} = Cmd, State) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
   {stop, Reason :: term(), NewState :: term()}.
 
+handle_call({connect_radar, Node, Pid}, _From, #state{radars = Radars} = State) ->
+  Bmp = get_image_bitmap(?RADAR_DRAWING),
+  {W, H} = wxPanel:getSize(State#state.canvas),
+  Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
+  NewRadars = Radars#{Pid => #radar_info{node = Node, pid = Pid, pos = Pos, bitmap = Bmp}},
+  {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
+
+handle_call({disconnect_radar, _Node, Pid}, _From, State) ->
+  try maps:take(Pid, State#state.radars) of
+    {#radar_info{bitmap = Bitmap}, NewRadars} ->
+      wxBitmap:destroy(Bitmap),
+      {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
+  catch
+    _Err:{badkey, _} ->
+      {reply, ok, State}
+  end;
+
+handle_call({reconnect_operator, Node}, _From, State) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{node = INode}) ->
+                              INode /= Node
+                          end, State#state.radars),
+  {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
@@ -426,6 +483,12 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
 
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
+
+handle_info({nodedown, Node}, State) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{node = INode}) ->
+                              INode /= Node
+                          end, State#state.radars),
+  {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
 handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
