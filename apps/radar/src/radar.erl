@@ -248,6 +248,7 @@ init([]) ->
   {noreply, NewState :: term(), Timeout :: timeout()} |
   {stop, Reason :: term(), NewState :: term()}.
 
+%% Mouse Events
 handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
   Bmp = get_image_bitmap(?RADAR_DRAWING),
@@ -325,6 +326,7 @@ handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo}
   wxPanel:disconnect(State#state.canvas, left_up),
   {noreply, State#state{click_info = ClickInfo#click_info{key = undefined, offset = {0, 0}}}};
 
+%% Window Events
 handle_event(#wx{event = #wxSize{}}, State) ->
   {noreply, State, {continue, [redraw_radars]}};
 
@@ -334,6 +336,7 @@ handle_event(#wx{event = #wxIconize{}}, State) ->
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
 
+%% Button Events
 handle_event(#wx{id=?SUS_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{} = State) ->
   % do something with the button
@@ -415,17 +418,21 @@ handle_call({connect_radar, Node, Pid}, _From, #state{radars = Radars} = State) 
   NewRadars = Radars#{Pid => #radar_info{node = Node, pid = Pid, pos = Pos, bitmap = Bmp}},
   {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
-handle_call({disconnect_radar, _Node, Pid}, _From, State) ->
+handle_call({disconnect_radar, _Node, Pid}, _From,
+            #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
   try maps:take(Pid, State#state.radars) of
     {#radar_info{bitmap = Bitmap}, NewRadars} ->
       wxBitmap:destroy(Bitmap),
-      {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
+      NewSelected = sets:del_element(Pid, Selected),
+      {reply, ok, State#state{radars = NewRadars,
+                              click_info = ClickInfo#click_info{selected = NewSelected}
+                             }, {continue, [redraw_radars]}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
   end;
 
-handle_call({reconnect_operator, Node}, _From, State) ->
+handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = State) ->
   NewRadars = maps:filter(fun(_Key, #radar_info{bitmap = Bitmap, node = INode}) ->
                               case INode of
                                 Node ->
@@ -433,7 +440,13 @@ handle_call({reconnect_operator, Node}, _From, State) ->
                                 _ -> true
                                 end
                           end, State#state.radars),
-  {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
+  NewSelected = sets:filter(fun(Elem) ->
+                              Info = maps:get(Elem, State#state.radars, #radar_info{node = undefined}),
+                              Info#radar_info.node /= Node
+                            end, ClickInfo#click_info.selected),
+  {reply, ok, State#state{radars = NewRadars,
+                          click_info = ClickInfo#click_info{selected = NewSelected}
+                         }, {continue, [redraw_radars]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
@@ -495,14 +508,20 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
-handle_info({nodedown, Node}, State) ->
+handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
   NewRadars = maps:filter(fun(_Key, #radar_info{bitmap = Bitmap, node = INode}) ->
                               case INode of
                                 Node -> wxBitmap:destroy(Bitmap), false;
                                 _ -> true
                                 end
                           end, State#state.radars),
-  {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
+  NewSelected = sets:filter(fun(Elem) ->
+                              Info = maps:get(Elem, State#state.radars, #radar_info{node = undefined}),
+                              Info#radar_info.node /= Node
+                            end, ClickInfo#click_info.selected),
+  {noreply, State#state{radars = NewRadars,
+                        click_info = ClickInfo#click_info{selected = NewSelected}
+                       }, {continue, [redraw_radars]}};
 
 handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
