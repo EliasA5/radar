@@ -387,9 +387,8 @@ handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}
              #state{frame = _Frame} = State) ->
   Env = wx:get_env(),
   spawn(fun() -> send_file_dialog(Env,
-                                  fun(Path) ->
-                                      io:format("user selected ~s~n", [Path])
-                                  end, "Pick a file to send")
+                                  fun parse_and_send_file/1,
+                                  "Pick a file to send")
         end),
   {noreply, State};
 
@@ -683,6 +682,17 @@ slider_dialog(Env, {Low, High, Def}, Callback, Title) ->
   wxDialog:destroy(SliderDialog),
   ok.
 
+-spec error_dialog(Env :: any(), Title :: string(), ErrorMessage :: string()) ->
+   ok.
+
+error_dialog(Env, Title, ErrorMessage) ->
+  wx:set_env(Env),
+  ErrorDialog = wxMessageDialog:new(wx:null(), ErrorMessage,
+                                    [{caption, Title}]
+                                  ),
+  wxMessageDialog:showModal(ErrorDialog).
+
+
 -spec send_file_dialog(Env :: any(),
                        Callback :: fun((string()) -> any()),
                        Title :: string()) -> ok.
@@ -853,3 +863,14 @@ reclip(X, Y, {W, H}) ->
       end,
   {F(X, 0, W) - ?BITMAP_WIDTH, F(Y, 0, H) - ?BITMAP_HEIGHT}.
 
+parse_and_send_file(Path) ->
+  try radar_parser:parse_file(Path) of
+    ParsedFile ->
+      ok
+  catch
+    throw:Err ->
+      Env = wx:get_env(),
+      Msg = io_lib:format("Err ~p~n", [Err]),
+      error_dialog(Env, "Error", Msg)
+  end,
+  ok.
