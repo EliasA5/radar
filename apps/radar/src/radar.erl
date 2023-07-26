@@ -431,7 +431,8 @@ handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State)
       {W, H} = wxPanel:getSize(State#state.canvas),
       Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
-    [{_, #radar_info{pos = Pos, angle = Angle}}]->
+    [{_, #radar_info{pos = {X, Y}, angle = Angle}}]->
+      Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
   {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
