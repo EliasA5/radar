@@ -40,7 +40,8 @@
           status_bar_stats,
           click_info,
           radars,
-          single_sample = false
+          single_sample = false,
+          radar_backup
 }).
 
 -record(click_info, {
@@ -55,6 +56,7 @@
           bitmap,
           node,
           pid,
+          name,
           samples
 }).
 
@@ -243,7 +245,8 @@ init([]) ->
   wxFrame:setIcon(Frame, Icon),
   wxIcon:destroy(Icon),
   wxFrame:show(Frame),
-  {ok, #state{frame = Frame, canvas = Canvas,
+  RadarBackup = ets:new(radar_backup, []),
+  {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup,
               status_bar = StatusBar, status_bar_stats = #stats{},
               click_info = #click_info{selected = sets:new()}, radars = #{}}}.
 
@@ -422,18 +425,25 @@ handle_event(#wx{} = Cmd, State) ->
   {stop, Reason :: term(), NewState :: term()}.
 
 handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State) ->
-  #{pid := Pid} = Info,
+  #{pid := Pid, name:= Name} = Info,
   Bmp = get_image_bitmap(?RADAR_DRAWING),
-  {W, H} = wxPanel:getSize(State#state.canvas),
-  Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
-  NewRadars = Radars#{Pid => #radar_info{node = Node, pid = Pid, pos = Pos, bitmap = Bmp}},
+  NewRadars = case ets:lookup(State#state.radar_backup, Name) of
+    [] ->
+      {W, H} = wxPanel:getSize(State#state.canvas),
+      Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
+      Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
+    [{_, #radar_info{pos = Pos, angle = Angle}}]->
+      Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
+    end,
   {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
   #{pid := Pid} = Info,
   try maps:take(Pid, State#state.radars) of
-    {#radar_info{bitmap = Bitmap}, NewRadars} ->
+    {#radar_info{name = Name, bitmap = Bitmap} = RadarInfo, NewRadars} ->
+      NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
+      ets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
       wxBitmap:destroy(Bitmap),
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
@@ -445,10 +455,13 @@ handle_call({disconnect_radar, _Node, Info}, _From,
   end;
 
 handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{bitmap = Bitmap, node = INode}) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
                               case INode of
                                 Node ->
-                                  wxBitmap:destroy(Bitmap), false;
+                                  wxBitmap:destroy(Bitmap),
+                                  NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
+                                  ets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
+                                  false;
                                 _ -> true
                                 end
                           end, State#state.radars),
@@ -532,9 +545,12 @@ handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
 handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{bitmap = Bitmap, node = INode}) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
                               case INode of
-                                Node -> wxBitmap:destroy(Bitmap), false;
+                                Node -> wxBitmap:destroy(Bitmap),
+                                  NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
+                                  ets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
+                                 false;
                                 _ -> true
                                 end
                           end, State#state.radars),
