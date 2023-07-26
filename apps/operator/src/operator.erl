@@ -18,18 +18,19 @@
 -export([start_link/0, start_link/1]).
 
 -export([scan_us/1, scan_ldr/1, scan_both/1, telemeter/2,
-        do_file/2, send_file/2]).
+        do_file/2, send_file/2, reconnect/1, reconnect/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3, format_status/2]).
+         handle_continue/2, terminate/2, code_change/3, format_status/2]).
 
 %% inotify event
 -export([inotify_event/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {comm_map, inotify_ref}).
+-record(state, {comm_map, inotify_ref, radar_node,
+                last_radar_node = nonode@nohost}).
 
 -record(comm_info, {atom_name}).
 
@@ -66,6 +67,16 @@ start_link() ->
 start_link(supervisor) ->
   gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+reconnect() ->
+  gen_server:call(?SERVER, {reconnect}).
+
+reconnect(RadarNode) when is_list(RadarNode) ->
+  gen_server:call(?SERVER, {reconnect, list_to_atom(RadarNode)});
+
+reconnect(RadarNode) when is_atom(RadarNode)->
+  gen_server:call(?SERVER, {reconnect, RadarNode}).
+
+%% GUI calls these
 -spec scan_us(Whom :: [pid()]) -> ok.
 
 scan_us(Whom) ->
@@ -113,23 +124,26 @@ send_file(Whom, ParsedFile) ->
                               ignore.
 init([]) ->
   process_flag(trap_exit, true),
-  case filelib:ensure_dir("/dev/serial/by-id") of
+  net_kernel:monitor_nodes(true),
+  RadarNode = list_to_atom(os:getenv("RADAR_NODE", "nonode@nohost")),
+  {CommMap, Ref} = case filelib:ensure_dir("/dev/serial/by-id") of
     {error, _Err} ->
       init_dev();
     ok ->
       init_serial()
-  end.
+  end,
+  {ok, #state{comm_map = CommMap, inotify_ref = Ref, radar_node = RadarNode}, {continue, reconnect}}.
 
 init_dev() ->
   Ref = inotify:watch("/dev", [create]),
   inotify:add_handler(Ref, ?SERVER, dev),
-  {ok, #state{comm_map = #{}, inotify_ref = Ref}}.
+  {#{}, Ref}.
 
 init_serial() ->
   CommMap = get_all_comms(),
   Ref = inotify:watch("/dev/serial/by-id", [create]),
   inotify:add_handler(Ref, ?SERVER, ser),
-  {ok, #state{comm_map = CommMap, inotify_ref = Ref}}.
+  {CommMap, Ref}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -146,6 +160,17 @@ init_serial() ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
   {stop, Reason :: term(), NewState :: term()}.
+
+handle_call({reconnect, RadarNode}, _from, State) ->
+  %% we can probably destroy wx here
+  {reply, ok, State#state{radar_node = RadarNode}, {continue, reconnect}};
+
+handle_call({reconnect}, _from, #state{last_radar_node = nonode@nohost} = State) ->
+  {reply, ok, State};
+
+handle_call({reconnect}, _from, #state{last_radar_node = LastRadarNode} = State) ->
+  {reply, ok, State#state{radar_node = LastRadarNode}, {continue, reconnect}};
+
 handle_call(_Request, _From, State) ->
   Reply = ok,
   {reply, Reply, State}.
@@ -162,6 +187,7 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
+%% To communication ports
 handle_cast({scan_us, Whom}, State) ->
   Msg = {send, ?SONIC_D_CMD, []},
   cast_msg(Whom, Msg, State#state.comm_map),
@@ -192,25 +218,23 @@ handle_cast({send_file, Whom, ParsedFile}, State) ->
   cast_msg(Whom, Msg, State#state.comm_map),
   {noreply, State};
 
+%% to GUI
 handle_cast({inotify, ser, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
   case get_comm(Name) of
     {true, {Cid, CommInfo}} ->
-      radar:connect_radar(node(), Cid),
-      {noreply, State#state{comm_map = CommMap#{Cid => CommInfo}}};
+      {noreply, State#state{comm_map = CommMap#{Cid => CommInfo}},
+                {continue, {connect_radar, [{Cid, CommInfo}]}}};
     false ->
       {noreply, State}
   end;
 
 handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = OldRef} = State) ->
   CommMap = get_all_comms(),
-  Node = node(),
-  maps:foreach(fun(Cid, _Val) ->
-                radar:connect_radar(Node, Cid)
-              end, CommMap),
   inotify:unwatch(OldRef),
   Ref = inotify:watch("/dev/serial/by-id/", [create]),
   inotify:add_handler(Ref, ?SERVER, ser),
-  {noreply, State#state{comm_map = CommMap, inotify_ref = Ref}};
+  {noreply, State#state{comm_map = CommMap, inotify_ref = Ref},
+            {continue, {connect_radar, maps:to_list(CommMap)}}};
 
 handle_cast(_Request, State) ->
   {noreply, State}.
@@ -229,7 +253,7 @@ handle_cast(_Request, State) ->
 
 handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
   case maps:take(Pid, CommMap) of
-    {_Name, NewMap} ->
+    {Info, NewMap} ->
       Ref = case map_size(NewMap) of
         0 ->
           inotify:unwatch(OldRef),
@@ -239,14 +263,62 @@ handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldR
         _ ->
           OldRef
       end,
-      radar:disconnect_radar(node(), Pid),
-      {noreply, State#state{comm_map = NewMap, inotify_ref = Ref}};
+      {noreply, State#state{comm_map = NewMap, inotify_ref = Ref},
+                {continue, {disconnect_radar, [{Pid, Info}]}}};
     error ->
       %% who died?
       {noreply, State}
   end;
+
+handle_info({nodedown, RadarNode}, #state{radar_node = RadarNode} = State) ->
+  {noreply, State#state{radar_node = nonode@nohost, last_radar_node = RadarNode}};
+
 handle_info(_Info, State) ->
   io:format("~w~n", [_Info]),
+  {noreply, State}.
+
+
+-spec handle_continue(Continue :: term(), State :: term()) ->
+  {noreply, NewState :: term()} |
+  {noreply, NewState :: term(), Timeout :: timeout()} |
+  {noreply, NewState :: term(), hibernate} |
+  {noreply, NewState :: term(), {continue, Continue :: term()}} |
+  {stop, Reason :: normal | term(), NewState :: term()}.
+
+handle_continue(_Continue, #state{radar_node = nonode@nohost} = State) ->
+  {noreply, State};
+
+handle_continue({connect_radar, Comms}, State) ->
+  Node = node(),
+  lists:foreach(fun({Pid, #comm_info{atom_name = Name} = _CommInfo}) ->
+                    radar:connect_radar(Node, #{pid => Pid, name => Name})
+                end, Comms),
+  {noreply, State};
+
+handle_continue({disconnect_radar, Pids}, State) ->
+  Node = node(),
+  lists:foreach(fun({Pid, #comm_info{atom_name = Name} = _CommInfo}) ->
+                    radar:disconnect_radar(Node, #{pid => Pid, name => Name})
+                end, Pids),
+  {noreply, State};
+
+handle_continue(reconnect, State) ->
+  %% change this
+  case ensure_connected(State#state.radar_node,
+                   fun() ->
+                       timer:sleep(1000),
+                       radar:reconnect_operator(node()),
+                       maps:foreach(fun(Cid, #comm_info{atom_name = Name} = _CommInfo) ->
+                                        radar:connect_radar(node(), #{pid => Cid, name => Name})
+                                    end, State#state.comm_map)
+                   end) of
+    ok ->
+      {noreply, State#state{last_radar_node = nonode@nohost}};
+    nok ->
+      {noreply, State#state{radar_node = nonode@nohost, last_radar_node = State#state.radar_node}}
+  end;
+
+handle_continue(_Continue, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -353,4 +425,17 @@ cast_msg(Whom, Msg, CommMap) ->
                     gen_statem:cast(Pid, Msg);
                   (_) -> ok
                 end, Whom2).
+
+ensure_connected(RadarNode, Callback) ->
+  case {is_alive(), net_kernel:connect_node(RadarNode)} of
+    {false, _} -> nok;
+    {_, true} -> Callback(), ok;
+    {_, false} -> radar_down(), nok;
+    {_, ignore} -> nok
+  end.
+
+radar_down() ->
+  % add a dialog that allows the user to input a new radar node name
+  % might be a problem with distributed since we may not have access to a screen
+  ok.
 

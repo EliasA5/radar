@@ -92,26 +92,34 @@ start_link() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Connects a new radar with Pid from Node
+%% Info is a map that includes:
+%% Info#{pid := Pid, name := Name, something_else => SE}
+%% where := is must include, => is optional
 %% @end
 %%--------------------------------------------------------------------
--spec connect_radar(Node :: node(), Pid :: pid()) -> ok.
+%%
+%%
+-spec connect_radar(Node :: node(), Info :: map()) -> ok.
 
-connect_radar(nonode@nohost, _Pid) ->
+connect_radar(nonode@nohost, _Info) ->
   ok;
-connect_radar(Node, Pid) ->
-  gen_server:call({global, ?SERVER}, {connect_radar, Node, Pid}).
+connect_radar(Node, Info) ->
+  gen_server:call({global, ?SERVER}, {connect_radar, Node, Info}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Disconnects a new radar with Pid from Node
+%% Info is a map that includes:
+%% Info#{pid := Pid, name := Name, something_else => SE}
+%% where := is must include, => is optional
 %% @end
 %%--------------------------------------------------------------------
--spec disconnect_radar(Node :: node(), Pid :: pid()) -> ok.
+-spec disconnect_radar(Node :: node(), Info :: map()) -> ok.
 
-disconnect_radar(nonode@nohost, _Pid) ->
+disconnect_radar(nonode@nohost, _Info) ->
   ok;
-disconnect_radar(Node, Pid) ->
-  gen_server:call({global, ?SERVER}, {disconnect_radar, Node, Pid}).
+disconnect_radar(Node, Info) ->
+  gen_server:call({global, ?SERVER}, {disconnect_radar, Node, Info}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -411,15 +419,17 @@ handle_event(#wx{} = Cmd, State) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_call({connect_radar, Node, Pid}, _From, #state{radars = Radars} = State) ->
+handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State) ->
+  #{pid := Pid} = Info,
   Bmp = get_image_bitmap(?RADAR_DRAWING),
   {W, H} = wxPanel:getSize(State#state.canvas),
   Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
   NewRadars = Radars#{Pid => #radar_info{node = Node, pid = Pid, pos = Pos, bitmap = Bmp}},
   {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
 
-handle_call({disconnect_radar, _Node, Pid}, _From,
+handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
+  #{pid := Pid} = Info,
   try maps:take(Pid, State#state.radars) of
     {#radar_info{bitmap = Bitmap}, NewRadars} ->
       wxBitmap:destroy(Bitmap),
