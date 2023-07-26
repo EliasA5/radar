@@ -440,13 +440,14 @@ handle_event(#wx{} = Cmd, State) ->
 
 handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State) ->
   #{pid := Pid, name:= Name} = Info,
-  Bmp = get_image_bitmap(?RADAR_DRAWING),
   NewRadars = case dets:lookup(State#state.radar_backup, Name) of
     [] ->
+      Bmp = get_image_bitmap(?RADAR_DRAWING),
       {W, H} = wxPanel:getSize(State#state.canvas),
       Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
     [{_, #radar_info{pos = {X, Y}, angle = Angle}}]->
+      Bmp = get_image_bitmap(?RADAR_DRAWING, Angle),
       Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
