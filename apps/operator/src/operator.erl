@@ -30,9 +30,9 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {comm_map, inotify_ref, radar_node,
-                last_radar_node = nonode@nohost}).
+                last_radar_node = nonode@nohost, cache = false}).
 
--record(comm_info, {atom_name}).
+-record(comm_info, {atom_name, samples = [], acks = 0, nacks = 0}).
 
 %%%===================================================================
 %%% API
@@ -186,6 +186,35 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), Timeout :: timeout()} |
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
+
+%% From Communication Ports
+handle_cast({ultrasonic, Cid, UltraSonic} = _SampleUS, #state{cache = false} = State) ->
+  gen_server:cast(State#state.radar_node, {Cid,
+                                           [{ultrasonic, erlang:monotonic_time(millisecond), UltraSonic}]
+                                          }),
+  {noreply, State};
+
+handle_cast({ldr, Cid, Ldr} = _SampleLdr, #state{cache = false} = State) ->
+  gen_server:cast(State#state.radar_node, {Cid,
+                                           [{ldr, erlang:monotonic_time(millisecond), Ldr}]
+                                          }),
+  {noreply, State};
+
+handle_cast({ack, Cid, _Ack}, #state{comm_map = CommMap} = State) ->
+  %% should never fail
+  NewCommMap = maps:update_with(Cid, fun(#comm_info{acks = Acks} = Info) ->
+                                         Info#comm_info{acks = Acks + 1}
+                                     end,
+                                CommMap),
+  {noreply, State#state{comm_map = NewCommMap}};
+
+handle_cast({wrong_ack, Cid, _Ack1, _Ack2}, #state{comm_map = CommMap} = State) ->
+  %% should never fail
+  NewCommMap = maps:update_with(Cid, fun(#comm_info{nacks = Nacks} = Info) ->
+                                         Info#comm_info{nacks = Nacks + 1}
+                                     end,
+                                CommMap),
+  {noreply, State#state{comm_map = NewCommMap}};
 
 %% To communication ports
 handle_cast({scan_us, Whom}, State) ->

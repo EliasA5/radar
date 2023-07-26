@@ -39,7 +39,8 @@
           status_bar,
           status_bar_stats,
           click_info,
-          radars
+          radars,
+          single_sample = false
 }).
 
 -record(click_info, {
@@ -53,7 +54,8 @@
           angle = 0,
           bitmap,
           node,
-          pid
+          pid,
+          samples
 }).
 
 -define(SUS_BUTTON, 100).
@@ -493,6 +495,17 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
+handle_cast({Pid, Samples}, State) when is_pid(Pid) andalso is_list(Samples) ->
+  try maps:update_with(Pid, fun(#radar_info{samples = OldSamples} = RadarInfo) ->
+                            NewSamples = [Samples | OldSamples],
+                            RadarInfo#radar_info{samples = NewSamples}
+                        end, State#state.radars) of
+    NewRadars ->
+      {noreply, State#state{radars = NewRadars}, {continue, {draw_samples, Pid}}}
+  catch
+    _Err:{badkey, _} -> {noreply, State}
+  end;
+
 handle_cast(_Request, State) ->
   {noreply, State}.
 
@@ -558,7 +571,11 @@ handle_continue(Continue, State) when is_list(Continue) ->
     false ->
       ok
   end,
+  {noreply, State};
+
+handle_continue(_Continue, State) ->
   {noreply, State}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
