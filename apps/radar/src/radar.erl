@@ -41,7 +41,8 @@
           click_info,
           radars,
           single_sample = false,
-          radar_backup
+          radar_backup,
+          noti_box
 }).
 
 -record(click_info, {
@@ -178,13 +179,14 @@ init([]) ->
   wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [150, 200, 100]}]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
   wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
-  Canvas = wxPanel:new(Frame, [{size, {500, 500}}, {style, ?wxBORDER_SIMPLE}]),
+  Canvas = wxPanel:new(Frame, [{size, {800, 500}}, {style, ?wxBORDER_SIMPLE}]),
 
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
   Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxStatusBar:setFont(StatusBar, Font),
   wxFont:destroy(Font),
+  BottomSizer = wxBoxSizer:new(?wxHORIZONTAL),
   ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
 
   ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
@@ -223,9 +225,21 @@ init([]) ->
   wxGridSizer:add(ButtonGridSizer, SendTelemer,
                   [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
 
+  NotificationsBox = wxTextCtrl:new(Frame, ?wxID_ANY, [
+                  {style, ?wxTE_BESTWRAP bor ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_LEFT},
+                  {size, {450, 100}}
+                ]),
+  wxBoxSizer:add(BottomSizer, ButtonGridSizer, [
+                  {flag, ?wxALL bor ?wxALIGN_LEFT},
+                  {border, 5}
+                 ]),
+  wxBoxSizer:add(BottomSizer, NotificationsBox, [
+                   {flag, ?wxALL bor ?wxALIGN_LEFT},
+                   {border, 5}
+                 ]),
   wxBoxSizer:add(MainSizer, StatusBar, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, Canvas, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
-  wxBoxSizer:add(MainSizer, ButtonGridSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(MainSizer, BottomSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
 
   wxWindow:setSizer(Frame, MainSizer),
   wxSizer:setSizeHints(MainSizer, Frame),
@@ -241,13 +255,14 @@ init([]) ->
   wxPanel:connect(Canvas, right_down),
   wxPanel:connect(Canvas, middle_down),
   {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
+  {ok, _TRef1} = timer:send_interval(60000, {flush_textbox}),
   Icon = wxIcon:new("imgs/app_icon.png"),
   wxFrame:setIcon(Frame, Icon),
   wxIcon:destroy(Icon),
   wxFrame:show(Frame),
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup,
-              status_bar = StatusBar, status_bar_stats = #stats{},
+              noti_box = NotificationsBox, status_bar = StatusBar, status_bar_stats = #stats{},
               click_info = #click_info{selected = sets:new()}, radars = #{}}}.
 
 %%--------------------------------------------------------------------
@@ -541,6 +556,18 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
   UpdatedState = State#state{status_bar_stats = #stats{ uptime = Uptime + 1}},
   {noreply, UpdatedState};
 
+handle_info({flush_textbox}, State) ->
+  Data = wxTextCtrl:getValue(State#state.noti_box),
+  case file:open("radar_log.txt", [append]) of
+    {ok, Dev} ->
+      file:write(Dev, Data),
+      file:close(Dev);
+    {error, _Err} ->
+      ok
+  end,
+  wxTextCtrl:clear(State#state.noti_box),
+  {noreply, State};
+
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
@@ -558,9 +585,14 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
                               Info = maps:get(Elem, State#state.radars, #radar_info{node = undefined}),
                               Info#radar_info.node /= Node
                             end, ClickInfo#click_info.selected),
+  append_textbox(State#state.noti_box, "node ~p disconnected~n", [Node]),
   {noreply, State#state{radars = NewRadars,
                         click_info = ClickInfo#click_info{selected = NewSelected}
                        }, {continue, [redraw_radars]}};
+
+handle_info({nodeup, Node}, State) ->
+  append_textbox(State#state.noti_box, "new node connected ~p~n", [Node]),
+  {noreply, State};
 
 handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
@@ -605,6 +637,15 @@ handle_continue(_Continue, State) ->
                 State :: term()) -> any().
 
 terminate(_Reason, State) ->
+  Data = wxTextCtrl:getValue(State#state.noti_box),
+  case file:open("radar_log.txt", [append]) of
+    {ok, Dev} ->
+      file:write(Dev, Data),
+      file:close(Dev);
+    {error, _Err} ->
+      ok
+  end,
+  wxTextCtrl:clear(State#state.noti_box),
   dets:close(State#state.radar_backup),
   radar_app:stop(State),
   ok.
@@ -874,4 +915,16 @@ parse_and_send_file(Path) ->
       Msg = io_lib:format("Err ~p~n", [Err]),
       error_dialog(Env, "Error", Msg)
   end,
+  ok.
+
+
+get_current_time_str() ->
+  %% {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:local_time(),
+  %% io_lib:format("~B/~B/~B: ~B:~B:~B", [Day, Month, Year, Hour, Min, Sec]).
+  {_, {Hour, Min, Sec}} = calendar:local_time(),
+  io_lib:format("~2..0B:~2..0B:~2..0B", [Hour, Min, Sec]).
+
+append_textbox(TextCtrl, Str, Args)->
+  TimeStr = get_current_time_str(),
+  wxTextCtrl:appendText(TextCtrl, io_lib:format("~s: " ++ Str, [TimeStr | Args])),
   ok.
