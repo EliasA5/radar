@@ -178,7 +178,6 @@ init([]) ->
   StatusBar = wxStatusBar:new(Frame),
   wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [150, 200, 100]}]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
-  wxStatusBar:setStatusText(StatusBar, "Nodes/Radars connected: 0/0", [{number, 1}]),
   Canvas = wxPanel:new(Frame, [{size, {800, 500}}, {style, ?wxBORDER_SIMPLE}]),
 
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
@@ -255,7 +254,6 @@ init([]) ->
   wxPanel:connect(Canvas, right_down),
   wxPanel:connect(Canvas, middle_down),
   {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
-  {ok, _TRef1} = timer:send_interval(60000, {flush_textbox}),
   Icon = wxIcon:new("imgs/app_icon.png"),
   wxFrame:setIcon(Frame, Icon),
   wxIcon:destroy(Icon),
@@ -263,7 +261,9 @@ init([]) ->
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup,
               noti_box = NotificationsBox, status_bar = StatusBar, status_bar_stats = #stats{},
-              click_info = #click_info{selected = sets:new()}, radars = #{}}}.
+              click_info = #click_info{selected = sets:new()}, radars = #{}},
+       {continue, [redraw_stat_bar, {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
+  }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -451,7 +451,7 @@ handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State)
       Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
-  {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
+  {reply, ok, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, redraw_radars]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
@@ -464,7 +464,7 @@ handle_call({disconnect_radar, _Node, Info}, _From,
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
                               click_info = ClickInfo#click_info{selected = NewSelected}
-                             }, {continue, [redraw_radars]}}
+                             }, {continue, [dec_radars, redraw_stat_bar, redraw_radars]}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
@@ -487,7 +487,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                             end, ClickInfo#click_info.selected),
   {reply, ok, State#state{radars = NewRadars,
                           click_info = ClickInfo#click_info{selected = NewSelected}
-                         }, {continue, [redraw_radars]}};
+                         }, {continue, [set_radar_nums, redraw_stat_bar, redraw_radars]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
@@ -550,24 +550,12 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
-handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime}} = State) ->
+handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime} = Stats} = State) ->
   {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
   UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
-  UpdatedState = State#state{status_bar_stats = #stats{ uptime = Uptime + 1}},
+  UpdatedState = State#state{status_bar_stats = Stats#stats{uptime = Uptime + 1}},
   {noreply, UpdatedState};
-
-handle_info({flush_textbox}, State) ->
-  Data = wxTextCtrl:getValue(State#state.noti_box),
-  case file:open("radar_log.txt", [append]) of
-    {ok, Dev} ->
-      file:write(Dev, Data),
-      file:close(Dev);
-    {error, _Err} ->
-      ok
-  end,
-  wxTextCtrl:clear(State#state.noti_box),
-  {noreply, State};
 
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
@@ -586,14 +574,13 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
                               Info = maps:get(Elem, State#state.radars, #radar_info{node = undefined}),
                               Info#radar_info.node /= Node
                             end, ClickInfo#click_info.selected),
-  append_textbox(State#state.noti_box, "node ~p disconnected~n", [Node]),
   {noreply, State#state{radars = NewRadars,
-                        click_info = ClickInfo#click_info{selected = NewSelected}
-                       }, {continue, [redraw_radars]}};
+                        click_info = ClickInfo#click_info{selected = NewSelected}},
+            {continue, [set_radar_nums, dec_nodes, redraw_stat_bar, redraw_radars,
+                         {log,  "node ~p disconnected~n", [Node]}]}};
 
 handle_info({nodeup, Node}, State) ->
-  append_textbox(State#state.noti_box, "new node connected ~p~n", [Node]),
-  {noreply, State};
+  {noreply, State, {continue, [inc_nodes, redraw_stat_bar, {log,  "new node connected ~p~n", [Node]}]}};
 
 handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
@@ -614,16 +601,52 @@ handle_info(_Info, State) ->
   {stop, Reason :: normal | term(), NewState :: term()}.
 
 handle_continue(Continue, State) when is_list(Continue) ->
-  case lists:member(redraw_radars, Continue) of
-    true ->
-      redraw_radars(State#state.canvas, State#state.radars, State#state.click_info#click_info.selected);
-    false ->
-      ok
-  end,
-  {noreply, State};
+  NewState = lists:foldl(fun do_cont/2, State, Continue),
+  {noreply, NewState};
 
-handle_continue(_Continue, State) ->
-  {noreply, State}.
+handle_continue(Continue, State) ->
+  {noreply, do_cont(Continue, State)}.
+
+do_cont(redraw_radars, State) ->
+  redraw_radars(State#state.canvas, State#state.radars, State#state.click_info#click_info.selected),
+  State;
+
+do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
+  case wxTextCtrl:getNumberOfLines(TextCtrl) of
+    N when N > 20 ->
+      Data = wxTextCtrl:getValue(State#state.noti_box),
+      {ok, Dev} = file:open("radar_log.txt", [append]),
+      file:write(Dev, Data),
+      file:close(Dev);
+    _ -> ok
+  end,
+  append_textbox(TextCtrl, Str, Args),
+  State;
+
+do_cont(redraw_stat_bar, #state{status_bar_stats = #stats{num_radars = NumRadars,
+                                                          num_nodes = NumNodes} = _Stats
+                               } = State) ->
+  StatusText = io_lib:format("Nodes/Radars connected: ~B/~B", [NumNodes, NumRadars]),
+  wxStatusBar:setStatusText(State#state.status_bar, StatusText, [{number, 1}]),
+  State;
+
+do_cont(inc_nodes, #state{status_bar_stats = #stats{num_nodes = NumNodes} = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{num_nodes = NumNodes + 1}};
+
+do_cont(dec_nodes, #state{status_bar_stats = #stats{num_nodes = NumNodes} = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{num_nodes = NumNodes - 1}};
+
+do_cont(inc_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{num_radars = NumRadars + 1}};
+
+do_cont(dec_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{num_radars = NumRadars - 1}};
+
+do_cont(set_radar_nums, #state{status_bar_stats = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{num_radars = map_size(State#state.radars)}};
+
+do_cont(_Continue, State) ->
+  State.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -638,15 +661,11 @@ handle_continue(_Continue, State) ->
                 State :: term()) -> any().
 
 terminate(_Reason, State) ->
+  append_textbox(State#state.noti_box, "~s, radar app exiting~n", [get_current_time_str(calendar)]),
   Data = wxTextCtrl:getValue(State#state.noti_box),
-  case file:open("radar_log.txt", [append]) of
-    {ok, Dev} ->
-      file:write(Dev, Data),
-      file:close(Dev);
-    {error, _Err} ->
-      ok
-  end,
-  wxTextCtrl:clear(State#state.noti_box),
+  {ok, Dev} = file:open("radar_log.txt", [append]),
+  file:write(Dev, Data),
+  file:close(Dev),
   dets:close(State#state.radar_backup),
   radar_app:stop(State),
   ok.
@@ -919,13 +938,18 @@ parse_and_send_file(Path) ->
   ok.
 
 
-get_current_time_str() ->
-  %% {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:local_time(),
-  %% io_lib:format("~B/~B/~B: ~B:~B:~B", [Day, Month, Year, Hour, Min, Sec]).
-  {_, {Hour, Min, Sec}} = calendar:local_time(),
-  io_lib:format("~2..0B:~2..0B:~2..0B", [Hour, Min, Sec]).
+get_current_time_str(Type) ->
+  {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:local_time(),
+  case Type of
+    full ->
+      io_lib:format("~2..0B/~2..0B/~B: ~2..0B:~2..0B:~2..0B", [Day, Month, Year, Hour, Min, Sec]);
+    hms ->
+      io_lib:format("~2..0B:~2..0B:~2..0B", [Hour, Min, Sec]);
+    calendar ->
+      io_lib:format("~2..0B/~2..0B/~B", [Day, Month, Year])
+  end.
 
 append_textbox(TextCtrl, Str, Args)->
-  TimeStr = get_current_time_str(),
+  TimeStr = get_current_time_str(hms),
   wxTextCtrl:appendText(TextCtrl, io_lib:format("~s: " ++ Str, [TimeStr | Args])),
   ok.
