@@ -29,7 +29,7 @@ extern inline void disable_interrupts();
 
 extern void send_char(char ch);
 
-extern void write_flash(char *buf, char sz);
+extern int write_flash(uchar *seg, uchar *buf, uchar sz);
 
 extern void add_ack_tx_queue(unsigned char opcode);
 extern void add_msg_tx_queue(unsigned char *buf, unsigned char len);

@@ -1,7 +1,7 @@
 #include "../header/api.h"    	    // private library - API layer
 #include "../header/halGPIO.h"      // private library - HAL layer
 #include "../header/LCD.h"
-
+#include "../header/app.h"
 
 static char digits[] = "0123456789ABCDEF";
 char *print_int(unsigned int x)
@@ -183,9 +183,10 @@ int telemeter_s_handler()
 	return 0;
 }
 
-unsigned char file_buf[60] = {0};
-unsigned char file_buf_idx = 0;
-unsigned char file_size = 0;
+extern struct file_manager fmanager;
+uchar file_buf[61] = {0};
+uchar file_buf_idx = 0;
+uchar file_size = 0;
 void file_rec_s_enter()
 {
 	file_buf_idx = 0;
@@ -195,14 +196,20 @@ void file_rec_s_enter()
 void file_rec_s_leave()
 {
 	// write_flash(file_buf, file_size);
+	uchar *seg = segments[fmanager.file_to_replace];
+	if((++fmanager.file_to_replace) > 2)
+		fmanager.file_to_replace = 0;
+	write_flash(seg, file_buf, file_buf_idx);
 	add_ack_tx_queue(MAKEACK(file_rec_s));
 }
 
 int file_rec_s_handler(unsigned char next)
 {
 	file_buf[file_buf_idx] = next;
-	if((++file_buf_idx) >= file_size)
+	if((++file_buf_idx) >= file_size){
+		file_buf[file_buf_idx] = 0;
 		return 0;
+	}
 	add_ack_tx_queue(MAKEACK(file_rec_s));
 	return 1;
 }
@@ -286,10 +293,9 @@ void ADC10_handler(int a0, int a3)
 	add_msg_tx_queue(msg, 2);
 }
 
-extern struct file_manager fmanager;
 void file_enter()
 {
-	uchar sleep = 0;
+	uchar sleep = 1;
 	if(fmanager.first_enter){
 		fmanager.d = 50;
 		fmanager.first_enter = 0;
@@ -306,7 +312,8 @@ void file_enter()
 	switch(*fmanager.file[fmanager.curr_file])
 	{
 		case 0: // end of file
-			// TODO deal with end of file
+			fmanager.file[fmanager.curr_file] = segments[fmanager.curr_file];
+			sleep = 0;
 			break;
 		case 1:
 			inc_lcd_enter(arg1);
@@ -322,9 +329,11 @@ void file_enter()
 			break;
 		case 4:
 			fmanager.d = arg1;
+			sleep = 0;
 			break;
 		case 5:
 			lcd_clear();
+			sleep = 0;
 			break;
 		case 6:
             set_radar_deg(arg1);
@@ -338,7 +347,10 @@ void file_enter()
 			enable_t0timer(fmanager.d);
 			break;
 		case 8:
-
+			sleep = 0;
+			break;
+		default:
+			sleep = 0;
 			break;
 	}
 
@@ -396,7 +408,7 @@ int file_handler()
 {
 	static uchar servo_deg_counter = 0;
 	uchar wakeup = 0;
-	switch(*fmanager.file[fmanager.curr_file] == 0)
+	switch(*fmanager.file[fmanager.curr_file])
 	{
 		case 1:
 			wakeup = inc_lcd();

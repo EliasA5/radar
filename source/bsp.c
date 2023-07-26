@@ -11,7 +11,6 @@ void GPIOconfig(void)
 	DCOCTL = 0;                               // Select lowest DCOx and MODx settings
 	BCSCTL1 = CALBC1_1MHZ;                    // Set DCO
 	DCOCTL = CALDCO_1MHZ;
-	// TODO lower the speed to accomodate flash writing
 	// RGB_DIR |= 0x07;
 	// RGB_SEL &= ~0x07;
 	// RGB_OUT &= ~0x07;

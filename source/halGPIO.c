@@ -129,10 +129,26 @@ void delay(unsigned int t)
 		__no_operation();
 }
 
-
-void write_flash(char *buf, char sz)
+int write_flash(uchar *seg, uchar *buf, uchar sz)
 {
-	// TODO implement this
+	int i;
+	if(sz > 64)
+		return 1;
+	if(seg != segments[0] &&
+	   seg != segments[1] &&
+	   seg != segments[2])
+		return 1;
+	FCTL2 = FWKEY + FSSEL_2 + FN1;
+	FCTL3 = FWKEY;
+	FCTL1 = FWKEY + ERASE;
+	seg[0] = 'x';
+	FCTL1 = FWKEY + WRT;
+	//write
+	for(i = 0; i <= sz; i++)
+		seg[i] = buf[i];
+	FCTL1 = FWKEY;
+	FCTL3 = FWKEY + LOCK;
+	return 0;
 }
 
 void enable_t0timer(unsigned char d)
@@ -247,7 +263,7 @@ void USCI0RX_ISR (void)
 				case file_0:
 					if(state != do_file || fmanager.curr_file != 0){
 						fmanager.first_enter = 1;
-						fmanager.file[0] = FILE0PTR;
+						fmanager.file[0] = (uchar *) FILE0PTR;
 					}
 					state = do_file;
 					fmanager.curr_file = 0;
@@ -256,7 +272,7 @@ void USCI0RX_ISR (void)
 				case file_1:
 					if(state != do_file || fmanager.curr_file != 1){
 						fmanager.first_enter = 1;
-						fmanager.file[1] = FILE1PTR;
+						fmanager.file[1] = (uchar *) FILE1PTR;
 					}
 					state = do_file;
 					fmanager.curr_file = 1;
@@ -265,7 +281,7 @@ void USCI0RX_ISR (void)
 				case file_2:
 					if(state != do_file || fmanager.curr_file != 2){
 						fmanager.first_enter = 1;
-						fmanager.file[2] = FILE2PTR;
+						fmanager.file[2] = (uchar *) FILE2PTR;
 					}
 					state = do_file;
 					fmanager.curr_file = 2;

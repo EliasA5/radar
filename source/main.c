@@ -6,6 +6,7 @@
 enum FSMstate state;
 enum SYSmode lpm_mode;
 struct file_manager fmanager = {0};
+const uchar *const segments[3] = {(uchar *) SEGMENT_B + 1, (uchar *) SEGMENT_C + 1, (uchar *) SEGMENT_D + 1};
 
 int main(void) {
 
