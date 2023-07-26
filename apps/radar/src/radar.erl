@@ -245,7 +245,7 @@ init([]) ->
   wxFrame:setIcon(Frame, Icon),
   wxIcon:destroy(Icon),
   wxFrame:show(Frame),
-  RadarBackup = ets:new(radar_backup, []),
+  {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup,
               status_bar = StatusBar, status_bar_stats = #stats{},
               click_info = #click_info{selected = sets:new()}, radars = #{}}}.
@@ -427,7 +427,7 @@ handle_event(#wx{} = Cmd, State) ->
 handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State) ->
   #{pid := Pid, name:= Name} = Info,
   Bmp = get_image_bitmap(?RADAR_DRAWING),
-  NewRadars = case ets:lookup(State#state.radar_backup, Name) of
+  NewRadars = case dets:lookup(State#state.radar_backup, Name) of
     [] ->
       {W, H} = wxPanel:getSize(State#state.canvas),
       Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
@@ -443,7 +443,7 @@ handle_call({disconnect_radar, _Node, Info}, _From,
   try maps:take(Pid, State#state.radars) of
     {#radar_info{name = Name, bitmap = Bitmap} = RadarInfo, NewRadars} ->
       NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
-      ets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
+      dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
       wxBitmap:destroy(Bitmap),
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
@@ -460,7 +460,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                                 Node ->
                                   wxBitmap:destroy(Bitmap),
                                   NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
-                                  ets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
+                                  dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
                                   false;
                                 _ -> true
                                 end
@@ -549,7 +549,7 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
                               case INode of
                                 Node -> wxBitmap:destroy(Bitmap),
                                   NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
-                                  ets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
+                                  dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
                                  false;
                                 _ -> true
                                 end
@@ -605,6 +605,7 @@ handle_continue(_Continue, State) ->
                 State :: term()) -> any().
 
 terminate(_Reason, State) ->
+  dets:close(State#state.radar_backup),
   radar_app:stop(State),
   ok.
 
