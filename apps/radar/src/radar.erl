@@ -719,10 +719,6 @@ do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
   lists:foreach(fun(Sample) -> draw_sample(Sample, Pos, RadarAngle, DC) end, Samples),
   wxDCOverlay:destroy(DCO),
 	wxWindowDC:destroy(DC),
-  State;
-
-
-do_cont(_Continue, State) ->
   State.
 
 %%--------------------------------------------------------------------
@@ -744,6 +740,10 @@ terminate(_Reason, State) ->
   file:write(Dev, Data),
   file:close(Dev),
   dets:close(State#state.radar_backup),
+  maps:foreach(fun(_Key, #radar_info{bitmap = Bitmap, overlay = Overlay}) ->
+                   wxOverlay:destroy(Overlay),
+                   wxBitmap:destroy(Bitmap)
+                end, State#state.radars),
   radar_app:stop(State),
   ok.
 
@@ -829,7 +829,8 @@ error_dialog(Env, Title, ErrorMessage) ->
   ErrorDialog = wxMessageDialog:new(wx:null(), ErrorMessage,
                                     [{caption, Title}]
                                   ),
-  wxMessageDialog:showModal(ErrorDialog).
+  wxMessageDialog:showModal(ErrorDialog),
+  wxMessageDialog:destroy(ErrorDialog).
 
 
 -spec send_file_dialog(Env :: any(),
@@ -940,23 +941,27 @@ is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
   end.
 
 
-draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = Overlay, bitmap = Bmp, node = Node}, false, DC) ->
+draw_radar_on_dc(_Key, #radar_info{pos = Pos, overlay = Overlay, bitmap = Bmp}, false, DC) ->
   DCO = wxDCOverlay:new(Overlay, DC),
-  wxDCOverlay:clear(DCO),
   wxOverlay:reset(Overlay),
+  wxDCOverlay:clear(DCO),
   wxDC:drawBitmap(DC, Bmp, Pos),
+  wxDCOverlay:destroy(DCO),
   ok;
+
 draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = Overlay, bitmap = Bmp, node = Node}, true, DC) ->
   DCO = wxDCOverlay:new(Overlay, DC),
   wxDCOverlay:clear(DCO),
-  wxOverlay:reset(Overlay),
   wxDC:drawBitmap(DC, Bmp, Pos),
   PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
   LastText = io_lib:format("~p", [Angle]),
   FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
   wxDC:drawLabel(DC, FinalText,
         {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]),
+  wxOverlay:reset(Overlay),
+  wxDCOverlay:destroy(DCO),
   ok.
+
 redraw_radars(Canvas, Radars, Selected) ->
   {W, H} = wxPanel:getSize(Canvas),
   Bitmap = wxBitmap:new(W, H),
@@ -985,24 +990,23 @@ draw(Canvas, Bitmap, Fun) ->
   wxPaintDC:destroy(CDC),
   wxMemoryDC:destroy(MemoryDC).
 
+get_image_bitmap(Path) ->
+  get_image_bitmap(Path, 0).
 
-  get_image_bitmap(Path) ->
-    get_image_bitmap(Path, 0).
+get_image_bitmap(Path, Angle) ->
+  get_image_bitmap(Path, Angle, 2*?BITMAP_WIDTH, 2*?BITMAP_HEIGHT).
 
-  get_image_bitmap(Path, Angle) ->
-    get_image_bitmap(Path, Angle, 2*?BITMAP_WIDTH, 2*?BITMAP_HEIGHT).
-
-  get_image_bitmap(Path, Angle, Width, Height) ->
-    Rads = -Angle / 180 * math:pi(),
-    Image = wxImage:new(Path),
-    Image2 = wxImage:scale(Image, Width, Height, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
-    wxImage:setMaskColour(Image2, 255, 255, 255),
-    Image3 = wxImage:rotate(Image2, Rads, {?BITMAP_WIDTH, ?BITMAP_HEIGHT}, [{interpolating, true}]),
-    Bmp = wxBitmap:new(Image3),
-    wxImage:destroy(Image),
-    wxImage:destroy(Image2),
-    wxImage:destroy(Image3),
-    Bmp.
+get_image_bitmap(Path, Angle, Width, Height) ->
+  Rads = -Angle / 180 * math:pi(),
+  Image = wxImage:new(Path),
+  Image2 = wxImage:scale(Image, Width, Height, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+  wxImage:setMaskColour(Image2, 255, 255, 255),
+  Image3 = wxImage:rotate(Image2, Rads, {?BITMAP_WIDTH, ?BITMAP_HEIGHT}, [{interpolating, true}]),
+  Bmp = wxBitmap:new(Image3),
+  wxImage:destroy(Image),
+  wxImage:destroy(Image2),
+  wxImage:destroy(Image3),
+  Bmp.
 
 update_angle(Key, Angle) ->
   gen_server:call({global, ?SERVER}, {update_angle, Key, Angle}).

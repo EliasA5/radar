@@ -188,15 +188,15 @@ handle_call(_Request, _From, State) ->
   {stop, Reason :: term(), NewState :: term()}.
 
 %% From Communication Ports
-handle_cast({ultrasonic, Cid, UltraSonic} = _SampleUS, #state{cache = false} = State) ->
-  gen_server:cast(State#state.radar_node, {Cid,
-                                           [{ultrasonic, erlang:monotonic_time(millisecond), UltraSonic}]
+handle_cast({ultrasonic, Cid, {Angle, Distance}} = _SampleUS, #state{cache = false} = State) ->
+  gen_server:cast({global, radar}, {Cid,
+                                           [{ultrasonic, Angle, Distance}]
                                           }),
   {noreply, State};
 
-handle_cast({ldr, Cid, Ldr} = _SampleLdr, #state{cache = false} = State) ->
-  gen_server:cast(State#state.radar_node, {Cid,
-                                           [{ldr, erlang:monotonic_time(millisecond), Ldr}]
+handle_cast({ldr, Cid, {Angle, Distance}} = _SampleLdr, #state{cache = false} = State) ->
+  gen_server:cast({global, radar}, {Cid,
+                                           [{ldr, Angle, Distance}]
                                           }),
   {noreply, State};
 
