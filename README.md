@@ -15,9 +15,9 @@ Run
 
 for the GUI:
 
-    $ rebar3 shell --apps radar
+    $ ERL_FLAGS='-config config/sys.config' rebar3 shell --apps radar --name radar@<ip> --setcookie <cookie>
 
 for the workers/operators:
 
-    $ rebar3 shell --apps operator
+    $ ERL_FLAGS='-config config/sys.config' RADAR_NODE=radar@<ip> rebar3 shell --apps operator --name <oprator_name>@<ip> --setcookie <cookie>
 
