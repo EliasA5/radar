@@ -456,11 +456,10 @@ cast_msg(Whom, Msg, CommMap) ->
                 end, Whom2).
 
 ensure_connected(RadarNode, Callback) ->
-  case {is_alive(), net_kernel:connect_node(RadarNode)} of
-    {false, _} -> nok;
-    {_, true} -> Callback(), ok;
-    {_, false} -> radar_down(), nok;
-    {_, ignore} -> nok
+  case net_kernel:connect_node(RadarNode) of
+    true -> Callback(), ok;
+    false -> radar_down(), nok;
+    ignored -> nok
   end.
 
 radar_down() ->
