@@ -148,7 +148,7 @@ rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{expected_ack = Ack, rec_amo
   {next_state, idle, Data};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{file = <<H:8, Tail/binary>>, expected_ack = Ack, rec_amount = RecAmount} = Data) when Ack =:= ?PCMSP_FILE ->
   Data#data.serial_port ! {send, <<H:8>>},
-  gen_server:cast(Data#data.operator_port, {ack, self(), ready_to_rec_next, RecAmount}),
+  gen_server:cast(Data#data.operator_port, {ack, self(), {ready_to_rec_next, RecAmount}}),
   % what type of ack should we expect?
   {next_state, rec_ack, Data#data{file = Tail, rec_amount = RecAmount-1}, {state_timeout, ?TIMEOUT_TIME, Data}};
 rec_ack(info, {data, <<?MSPPC_ACK:2, Ack:6>>}, #data{expected_ack = Ack} = Data) ->

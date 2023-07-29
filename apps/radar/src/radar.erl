@@ -37,6 +37,7 @@
 -record(state, {
           frame,
           canvas,
+          detections_bar,
           status_bar,
           status_bar_stats,
           click_info,
@@ -186,15 +187,16 @@ init([]) ->
   wxStatusBar:setFieldsCount(StatusBar, 2, [{widths, [-3, -5]}]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
   DetectionsPanel = wxPanel:new(Frame, []),
-  wxPanel:setBackgroundColour(DetectionsPanel, ?wxWHITE),
+  DetectionsText = wxStatusBar:new(Frame, []),
   DetectionsBmp = get_image_bitmap(?DETECTIONS_DRAWING, 0, ?DETECTION_EDGE, ?DETECTION_EDGE),
-  DetectionsStaticBmp = wxStaticBitmap:new(DetectionsPanel, -1, DetectionsBmp),
+  wxStaticBitmap:new(DetectionsPanel, -1, DetectionsBmp),
   Canvas = wxPanel:new(Frame, [{size, {1040, 650}}, {style, ?wxBORDER_SIMPLE}]),
 
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
   Font = wxFont:new(9, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxStatusBar:setFont(StatusBar, Font),
+  wxStatusBar:setFont(DetectionsText, Font),
   wxFont:destroy(Font),
   BottomSizer = wxBoxSizer:new(?wxHORIZONTAL),
   ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
@@ -249,6 +251,7 @@ init([]) ->
                  ]),
   wxBoxSizer:add(TopSizer, StatusBar, [{proportion, 4}, {flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(TopSizer, DetectionsPanel, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(TopSizer, DetectionsText, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, TopSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, Canvas, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, BottomSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
@@ -271,10 +274,10 @@ init([]) ->
   wxIcon:destroy(Icon),
   wxFrame:show(Frame),
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
-  {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup,
+  {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
               noti_box = NotificationsBox, status_bar = StatusBar, status_bar_stats = #stats{},
               click_info = #click_info{selected = sets:new()}, radars = #{}},
-       {continue, [redraw_stat_bar, {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
+       {continue, [redraw_stat_bar, redraw_detections_bar, {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
   }.
 
 %%--------------------------------------------------------------------
@@ -391,7 +394,7 @@ handle_event(#wx{id=?SUS_BUTTON, event=#wxCommand{type=command_button_clicked}},
     true -> operator:scan_us(all);
     false -> operator:scan_us(sets:to_list(Selected))
   end,
-  {noreply, State, {continue, [remove_samples, redraw_radars]}};
+  {noreply, State};
 
 handle_event(#wx{id=?SLDR_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{click_info = #click_info{selected = Selected}} = State) ->
@@ -399,7 +402,7 @@ handle_event(#wx{id=?SLDR_BUTTON, event=#wxCommand{type=command_button_clicked}}
     true -> operator:scan_ldr(all);
     false -> operator:scan_ldr(sets:to_list(Selected))
   end,
-  {noreply, State, {continue, [remove_samples, redraw_radars]}};
+  {noreply, State};
 
 handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{click_info = #click_info{selected = Selected}} = State) ->
@@ -408,7 +411,7 @@ handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}
     false -> operator:scan_both(sets:to_list(Selected))
   end,
   % operator:go_idle(all),
-  {noreply, State, {continue, [remove_samples, redraw_radars]}};
+  {noreply, State};
 
 handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{click_info = #click_info{selected = Selected}} = State) ->
@@ -416,7 +419,7 @@ handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}
     true -> operator:do_file(all, 0);
     false -> operator:scan_both(sets:to_list(Selected), 0)
   end,
-  {noreply, State, {continue, [remove_samples, redraw_radars]}};
+  {noreply, State};
 
 handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{click_info = #click_info{selected = Selected}} = State) ->
@@ -424,7 +427,7 @@ handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}
     true -> operator:do_file(all, 1);
     false -> operator:scan_both(sets:to_list(Selected), 1)
   end,
-  {noreply, State, {continue, [remove_samples, redraw_radars]}};
+  {noreply, State};
 
 handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{click_info = #click_info{selected = Selected}} = State) ->
@@ -432,7 +435,7 @@ handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}
     true -> operator:do_file(all, 2);
     false -> operator:scan_both(sets:to_list(Selected), 2)
   end,
-  {noreply, State, {continue, [remove_samples, redraw_radars]}};
+  {noreply, State};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame, status_bar_stats = Stats} = State) ->
@@ -561,7 +564,7 @@ handle_call({send_file, File}, _From,
     true -> operator:send_file(all, File);
     false -> operator:send_file(sets:to_list(Selected), File)
   end,
-  {reply, ok, State, {continue, [remove_samples, redraw_radars]}};
+  {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
@@ -589,7 +592,7 @@ handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) and
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, [{inc_detections, length(Samples)}, redraw_detections_counter, {draw_samples, Pid}]}}
+      {noreply, State#state{radars = NewRadars}, {continue, [{draw_samples, Pid}, set_detections, redraw_detections_bar]}}
   catch
     _Err:{badkey, _} -> {noreply, State}
   end;
@@ -614,7 +617,12 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
   UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
   UpdatedState = State#state{status_bar_stats = Stats#stats{uptime = Uptime + 1}},
-  {noreply, UpdatedState};
+  case Uptime rem 3 of
+    0 ->
+      {noreply, UpdatedState, {continue, draw_samples}};
+    _ ->
+      {noreply, UpdatedState}
+  end;
 
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
@@ -717,6 +725,12 @@ do_cont(redraw_stat_bar, #state{status_bar_stats = #stats{num_radars = NumRadars
   wxStatusBar:setStatusText(State#state.status_bar, StatusText, [{number, 1}]),
   State;
 
+do_cont(redraw_detections_bar, #state{status_bar_stats = #stats{active_detections = ActiveDetections} = _Stats
+                               } = State) ->
+  DetectionsText = io_lib:format("Active Detections: ~B", [ActiveDetections]),
+  wxStatusBar:setStatusText(State#state.detections_bar, DetectionsText),
+  State;
+
 do_cont(inc_nodes, #state{status_bar_stats = #stats{num_nodes = NumNodes} = Stats} = State) ->
   State#state{status_bar_stats = Stats#stats{num_nodes = NumNodes + 1}};
 
@@ -732,15 +746,27 @@ do_cont(dec_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = S
 do_cont(set_radar_nums, #state{status_bar_stats = Stats} = State) ->
   State#state{status_bar_stats = Stats#stats{num_radars = map_size(State#state.radars)}};
 
-do_cont({inc_detections, Num}, #state{status_bar_stats = #stats{active_detections = ActiveDetections} = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{active_detections = ActiveDetections + Num}};
-
-do_cont({dec_detections, Num}, #state{status_bar_stats = #stats{active_detections = ActiveDetections} = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{active_detections = ActiveDetections - Num}};
-
 do_cont(set_detections, #state{status_bar_stats = Stats} = State) ->
   DetectionNum = maps:fold(fun(_Key, #radar_info{samples = Samples}, Acc) -> Acc + length(Samples) end, 0, State#state.radars),
   State#state{status_bar_stats = Stats#stats{active_detections = DetectionNum}};
+
+do_cont(draw_samples, State) ->
+  DC = wxWindowDC:new(State#state.canvas),
+  TimeNow = erlang:monotonic_time(millisecond),
+  NewRadars = maps:map(fun(_Key, #radar_info{overlay = Overlay, pos = Pos, samples = Samples, angle = RadarAngle} = RadarInfo) ->
+                          DCO = wxDCOverlay:new(Overlay, DC),
+                          wxDCOverlay:clear(DCO),
+                          NewSamples = lists:filter(fun
+                                                      ({_, Time, _, _}) when TimeNow - Time > 3000 -> false;
+                                                      (Sample) ->
+                                                        draw_sample(Sample, Pos, TimeNow, RadarAngle, DC),
+                                                        true
+                                                    end, Samples),
+                          wxDCOverlay:destroy(DCO),
+                          RadarInfo#radar_info{samples = NewSamples}
+                      end, State#state.radars),
+	wxWindowDC:destroy(DC),
+  State#state{radars = NewRadars};
 
 %% [{ldr, Angle, Distance}]
 %% [{ultrasonic, Angle, Distance}]
@@ -761,9 +787,9 @@ do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
   NewRadars = (State#state.radars)#{Pid := RadarInfo#radar_info{samples = NewSamples}},
   State#state{radars = NewRadars};
 
-  do_cont(remove_samples, #state{radars = Radars} = State) ->
-    NewRadars = maps:map(fun(_Pid, RadarInfo) -> RadarInfo#radar_info{samples = []} end, Radars),
-    State#state{radars = NewRadars}.
+do_cont(remove_samples, #state{radars = Radars} = State) ->
+  NewRadars = maps:map(fun(_Pid, RadarInfo) -> RadarInfo#radar_info{samples = []} end, Radars),
+  State#state{radars = NewRadars}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -788,7 +814,6 @@ terminate(_Reason, State) ->
                    wxOverlay:destroy(Overlay),
                    wxBitmap:destroy(Bitmap)
                 end, State#state.radars),
-  radar_app:stop(State),
   ok.
 
 %%--------------------------------------------------------------------

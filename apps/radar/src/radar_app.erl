@@ -19,7 +19,6 @@ start(_StartType, _StartArgs) ->
   radar_app:start_link().
 
 stop(_State) ->
-  wx:destroy(),
   init:stop(0),
   ok.
 
