@@ -44,7 +44,7 @@
           single_sample = false,
           radar_backup,
           noti_box
-          
+
 }).
 
 -record(click_info, {
@@ -167,7 +167,7 @@ reconnect_operator(Node) ->
 %%    |                                        |
 %%    |                                        |
 %%    ------------------------------------------
-%%    -Button grid sizer---Notifications Panel-- 
+%%    -Button grid sizer---Notifications Panel--
 %%                         ____________________
 %%    | butt1    butt2 |  |                    |
 %%    | butt3    butt4 |  |____________________|
@@ -556,7 +556,7 @@ handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) and
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, {draw_samples, Pid}}}
+      {noreply, State#state{radars = NewRadars}, {continue, [{inc_detections, length(Samples)}, redraw_detections_counter, {draw_samples, Pid}]}}
   catch
     _Err:{badkey, _} -> {noreply, State}
   end;
@@ -699,6 +699,16 @@ do_cont(dec_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = S
 do_cont(set_radar_nums, #state{status_bar_stats = Stats} = State) ->
   State#state{status_bar_stats = Stats#stats{num_radars = map_size(State#state.radars)}};
 
+do_cont({inc_detections, Num}, #state{status_bar_stats = #stats{active_detections = ActiveDetections} = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{active_detections = ActiveDetections + Num}};
+
+do_cont({dec_detections, Num}, #state{status_bar_stats = #stats{active_detections = ActiveDetections} = Stats} = State) ->
+  State#state{status_bar_stats = Stats#stats{active_detections = ActiveDetections - Num}};
+
+do_cont(set_detections, #state{status_bar_stats = Stats} = State) ->
+  DetectionNum = maps:fold(fun(_Key, #radar_info{samples = Samples}, Acc) -> Acc + length(Samples) end, 0, State#state.radars),
+  State#state{status_bar_stats = Stats#stats{active_detections = DetectionNum}};
+
 %% [{ldr, Angle, Distance}]
 %% [{ultrasonic, Angle, Distance}]
 do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
@@ -706,7 +716,7 @@ do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
   DC = wxWindowDC:new(Canvas),
   DCO = wxDCOverlay:new(Overlay, DC),
   % wxDCOverlay:clear(DCO),
-  lists:foreach(fun(Sample) -> draw_sample(Sample, Pos, RadarAngle, DC) end, Samples), 
+  lists:foreach(fun(Sample) -> draw_sample(Sample, Pos, RadarAngle, DC) end, Samples),
   wxDCOverlay:destroy(DCO),
 	wxWindowDC:destroy(DC),
   State;
@@ -978,10 +988,10 @@ draw(Canvas, Bitmap, Fun) ->
 
   get_image_bitmap(Path) ->
     get_image_bitmap(Path, 0).
-  
+
   get_image_bitmap(Path, Angle) ->
     get_image_bitmap(Path, Angle, 2*?BITMAP_WIDTH, 2*?BITMAP_HEIGHT).
-  
+
   get_image_bitmap(Path, Angle, Width, Height) ->
     Rads = -Angle / 180 * math:pi(),
     Image = wxImage:new(Path),
@@ -1038,6 +1048,5 @@ draw_sample({_SampleType, Angle, Dist}, {X, Y}, RadarAngle, DC) ->
   Rads = (RadarAngle - Angle) / 180 * math:pi(),
   {Xs, Ys} = {Xc + Dist*math:cos(Rads), Yc + Dist*math:sin(Rads)},
   RedBrush = wxBrush:new(?wxRED),
-  
   wxDC:setBrush(DC, RedBrush),
   wxDC:drawCircle(DC, {round(Xs), round(Ys)}, 3).
