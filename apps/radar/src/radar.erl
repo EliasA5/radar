@@ -183,7 +183,7 @@ init([]) ->
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
   TopSizer = wxBoxSizer:new(?wxHORIZONTAL),
   StatusBar = wxStatusBar:new(Frame),
-  wxStatusBar:setFieldsCount(StatusBar, 2, [{widths, [-2, -3]}]),
+  wxStatusBar:setFieldsCount(StatusBar, 2, [{widths, [-3, -5]}]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
   DetectionsPanel = wxPanel:new(Frame, []),
   wxPanel:setBackgroundColour(DetectionsPanel, ?wxWHITE),
@@ -192,7 +192,7 @@ init([]) ->
   Canvas = wxPanel:new(Frame, [{size, {1040, 650}}, {style, ?wxBORDER_SIMPLE}]),
 
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
-  Font = wxFont:new(10, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
+  Font = wxFont:new(9, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxStatusBar:setFont(StatusBar, Font),
   wxFont:destroy(Font),
@@ -247,7 +247,7 @@ init([]) ->
                    {flag, ?wxALL bor ?wxALIGN_LEFT},
                    {border, 5}
                  ]),
-  wxBoxSizer:add(TopSizer, StatusBar, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(TopSizer, StatusBar, [{proportion, 4}, {flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(TopSizer, DetectionsPanel, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, TopSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, Canvas, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
