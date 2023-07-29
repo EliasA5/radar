@@ -189,7 +189,7 @@ init([]) ->
   wxPanel:setBackgroundColour(DetectionsPanel, ?wxWHITE),
   DetectionsBmp = get_image_bitmap(?DETECTIONS_DRAWING, 0, ?DETECTION_EDGE, ?DETECTION_EDGE),
   DetectionsStaticBmp = wxStaticBitmap:new(DetectionsPanel, -1, DetectionsBmp),
-  Canvas = wxPanel:new(Frame, [{size, {800, 500}}, {style, ?wxBORDER_SIMPLE}]),
+  Canvas = wxPanel:new(Frame, [{size, {1040, 650}}, {style, ?wxBORDER_SIMPLE}]),
 
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
   Font = wxFont:new(10, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
@@ -386,31 +386,53 @@ handle_event(#wx{event = #wxClose{}}, State) ->
 
 %% Button Events
 handle_event(#wx{id=?SUS_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             #state{} = State) ->
-  % do something with the button
-  io:format("Scan button pressed~n"),
-  {noreply, State};
+             #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:scan_us(all);
+    false -> operator:scan_us(sets:to_list(Selected))
+  end,
+  {noreply, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_event(#wx{id=?SLDR_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             #state{} = State) ->
-  {noreply, State};
+             #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:scan_ldr(all);
+    false -> operator:scan_ldr(sets:to_list(Selected))
+  end,
+  {noreply, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             #state{} = State) ->
-  {noreply, State};
+             #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:scan_both(all);
+    false -> operator:scan_both(sets:to_list(Selected))
+  end,
+  % operator:go_idle(all),
+  {noreply, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             #state{} = State) ->
-  {noreply, State};
+             #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:do_file(all, 0);
+    false -> operator:scan_both(sets:to_list(Selected), 0)
+  end,
+  {noreply, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             #state{} = State) ->
-  {noreply, State};
+             #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:do_file(all, 1);
+    false -> operator:scan_both(sets:to_list(Selected), 1)
+  end,
+  {noreply, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}},
-             #state{} = State) ->
-
-  {noreply, State};
+             #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:do_file(all, 2);
+    false -> operator:scan_both(sets:to_list(Selected), 2)
+  end,
+  {noreply, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame, status_bar_stats = Stats} = State) ->
@@ -527,11 +549,19 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                            Info#radar_info{bitmap = Bmp, angle = Angle}
                        end, State#state.radars) of
     NewRadars ->
-      {reply, ok, State#state{radars = NewRadars}, {continue, {redraw_radar, Key}}}
+      {reply, ok, State#state{radars = NewRadars}, {continue, redraw_radars}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
   end;
+
+handle_call({send_file, File}, _From,
+              #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:send_file(all, File);
+    false -> operator:send_file(sets:to_list(Selected), File)
+  end,
+  {reply, ok, State, {continue, [remove_samples, redraw_radars]}};
 
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
@@ -552,7 +582,10 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) andalso is_list(Samples) ->
   try maps:update_with(Pid, fun(#radar_info{samples = OldSamples} = RadarInfo) ->
-                            NewSamples = Samples ++ OldSamples,
+                            SamplesTime = lists:map(fun({Type, Angle, Dist}) ->
+                                                        {Type, erlang:monotonic_time(millisecond), Angle, Dist}
+                                                    end, Samples),
+                            NewSamples = SamplesTime ++ OldSamples,
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
@@ -712,14 +745,25 @@ do_cont(set_detections, #state{status_bar_stats = Stats} = State) ->
 %% [{ldr, Angle, Distance}]
 %% [{ultrasonic, Angle, Distance}]
 do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
-  #{Pid := #radar_info{overlay = Overlay, pos = Pos, samples = Samples, angle = RadarAngle}} = State#state.radars,
+  #{Pid := #radar_info{overlay = Overlay, pos = Pos, samples = Samples, angle = RadarAngle} = RadarInfo} = State#state.radars,
   DC = wxWindowDC:new(Canvas),
   DCO = wxDCOverlay:new(Overlay, DC),
-  % wxDCOverlay:clear(DCO),
-  lists:foreach(fun(Sample) -> draw_sample(Sample, Pos, RadarAngle, DC) end, Samples),
+  wxDCOverlay:clear(DCO),
+  TimeNow = erlang:monotonic_time(millisecond),
+  NewSamples = lists:filter(fun
+                              ({_, Time, _, _}) when TimeNow - Time > 3000 -> false;
+                              (Sample) ->
+                                draw_sample(Sample, Pos, TimeNow, RadarAngle, DC),
+                                true
+                            end, Samples),
   wxDCOverlay:destroy(DCO),
 	wxWindowDC:destroy(DC),
-  State.
+  NewRadars = (State#state.radars)#{Pid := RadarInfo#radar_info{samples = NewSamples}},
+  State#state{radars = NewRadars};
+
+  do_cont(remove_samples, #state{radars = Radars} = State) ->
+    NewRadars = maps:map(fun(_Pid, RadarInfo) -> RadarInfo#radar_info{samples = []} end, Radars),
+    State#state{radars = NewRadars}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -943,8 +987,8 @@ is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
 
 draw_radar_on_dc(_Key, #radar_info{pos = Pos, overlay = Overlay, bitmap = Bmp}, false, DC) ->
   DCO = wxDCOverlay:new(Overlay, DC),
-  wxOverlay:reset(Overlay),
   wxDCOverlay:clear(DCO),
+  wxOverlay:reset(Overlay),
   wxDC:drawBitmap(DC, Bmp, Pos),
   wxDCOverlay:destroy(DCO),
   ok;
@@ -972,6 +1016,7 @@ redraw_radars(Canvas, Radars, Selected) ->
             wxDC:setFont(DC, Font),
             wxFont:destroy(Font),
             maps:foreach(fun(Key, RadarInfo) ->
+                          wxOverlay:reset(RadarInfo#radar_info.overlay),
                           draw_radar_on_dc(Key, RadarInfo, sets:is_element(Key, Selected), DC)
                          end, Radars)
         end,
@@ -1020,7 +1065,7 @@ reclip(X, Y, {W, H}) ->
 parse_and_send_file(Path) ->
   try radar_parser:parse_file(Path) of
     ParsedFile ->
-      ok
+      gen_server:call({global, ?SERVER}, {send_file, ParsedFile})
   catch
     throw:Err ->
       Env = wx:get_env(),
@@ -1046,11 +1091,17 @@ append_textbox(TextCtrl, Str, Args)->
   wxTextCtrl:appendText(TextCtrl, io_lib:format("~s: " ++ Str, [TimeStr | Args])),
   ok.
 
-draw_sample({_SampleType, Angle, Dist}, {X, Y}, RadarAngle, DC) ->
+draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, DC) ->
   {Xc, Yc} = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},        % Centered around the middle of the radar bitmap
-  io:format("Radar Angle, Angle ~p~n", [{RadarAngle, Angle}]),
   Rads = (RadarAngle - Angle) / 180 * math:pi(),
   {Xs, Ys} = {Xc + Dist*math:cos(Rads), Yc + Dist*math:sin(Rads)},
-  RedBrush = wxBrush:new(?wxRED),
-  wxDC:setBrush(DC, RedBrush),
-  wxDC:drawCircle(DC, {round(Xs), round(Ys)}, 3).
+  Brush = case SampleType of
+    ultrasonic ->
+      wxBrush:new(?wxRED);
+    ldr ->
+      wxBrush:new(?wxBLUE)
+    end,
+  wxDC:setBrush(DC, Brush),
+
+  TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
+  wxDC:drawCircle(DC, {round(Xs), round(Ys)}, 2*TimeDiff).

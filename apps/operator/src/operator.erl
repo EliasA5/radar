@@ -17,7 +17,7 @@
 %% API
 -export([start_link/0, start_link/1]).
 
--export([scan_us/1, scan_ldr/1, scan_both/1, telemeter/2,
+-export([scan_us/1, scan_ldr/1, scan_both/1, telemeter/2, go_idle/1,
         do_file/2, send_file/2, reconnect/1, reconnect/0]).
 
 %% gen_server callbacks
@@ -77,6 +77,12 @@ reconnect(RadarNode) when is_atom(RadarNode)->
   gen_server:call(?SERVER, {reconnect, RadarNode}).
 
 %% GUI calls these
+
+-spec go_idle(Whom :: [pid()]) -> ok.
+
+go_idle(Whom) ->
+  gen_server:abcast(nodes(), ?SERVER, {go_idle, Whom}).
+
 -spec scan_us(Whom :: [pid()]) -> ok.
 
 scan_us(Whom) ->
@@ -217,6 +223,10 @@ handle_cast({wrong_ack, Cid, _Ack1, _Ack2}, #state{comm_map = CommMap} = State) 
   {noreply, State#state{comm_map = NewCommMap}};
 
 %% To communication ports
+handle_cast({go_idle, Whom}, State) ->
+  Msg = {send, ?IDLE_CMD, []},
+  cast_msg(Whom, Msg, State#state.comm_map),
+  {noreply, State};
 handle_cast({scan_us, Whom}, State) ->
   Msg = {send, ?SONIC_D_CMD, []},
   cast_msg(Whom, Msg, State#state.comm_map),
@@ -265,7 +275,7 @@ handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = Ol
   {noreply, State#state{comm_map = CommMap, inotify_ref = Ref},
             {continue, {connect_radar, maps:to_list(CommMap)}}};
 
-handle_cast(_Request, State) ->
+handle_cast({inotify, dev, _EventTag, _Masks, _Name}, State) ->
   {noreply, State}.
 
 %%--------------------------------------------------------------------

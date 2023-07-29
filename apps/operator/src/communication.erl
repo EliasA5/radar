@@ -109,7 +109,7 @@ idle(info, {data, <<?MSPPC_ULTRASONIC:2, Degree:6>>}, Data) ->
 idle(info, {data, <<?MSPPC_LDR:2, Degree:6>>}, Data) ->
   {next_state, rec, Data#data{rec_type = ldr, rec_amount = 1, rec_buf = <<Degree:8>>}, ?TIMEOUT_TIME};
 idle(info, {data, Byte = <<Two:2, Arg:6>>}, _Data) ->
-  io:format("got unexpected data from msp430: ~w = <<~w:2,~w:6>>~n", [Byte, Two, Arg]),
+  %% io:format("got unexpected data from msp430: ~w = <<~w:2,~w:6>>~n", [Byte, Two, Arg]),
   keep_state_and_data;
 % commands to send
 idle(cast, {send, telemeter, Angle}, Data) ->
@@ -181,7 +181,11 @@ rec_ack(_Type, _Msg, _Data) ->
 rec(info, {data, Byte}, #data{rec_type = ultrasonic, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
-  gen_server:cast(Data#data.operator_port, {ultrasonic, self(), format_ultrasonic(RecBuf)}),
+  case format_ultrasonic(RecBuf) of
+    {_Angle, Dist} = Sample when Dist > 0 andalso Dist < 400 ->
+      gen_server:cast(Data#data.operator_port, {ultrasonic, self(), Sample});
+    _ -> ok
+  end,
   {next_state, idle, Data};
 rec(info, {data, Byte}, #data{rec_type = ultrasonic} = Data) ->
   %append Byte to rec buffer
@@ -191,7 +195,11 @@ rec(info, {data, Byte}, #data{rec_type = ultrasonic} = Data) ->
 rec(info, {data, Byte}, #data{rec_type = ldr, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
-  gen_server:cast(Data#data.operator_port, {ldr, self(), format_ldr(RecBuf)}),
+  case format_ldr(RecBuf) of
+    {_Angle, Dist} = Sample when Dist > 0 andalso Dist < 60 ->
+      gen_server:cast(Data#data.operator_port, {ldr, self(), Sample});
+    _ -> ok
+  end,
   {next_state, idle, Data};
 rec(cast, _Msg, Data) ->
   {next_state, rec, Data, [postpone, 5000]};
@@ -235,10 +243,10 @@ code_change(_OldVsn, State, Data, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-format_ultrasonic(RecBuf) ->
-  RecBuf.
+format_ultrasonic(<<Deg:8, Time:16>>) ->
+  {Deg*3, (Time * 17000) div 1048576}.
 
-format_ldr(RecBuf) ->
-  RecBuf.
+format_ldr(<<Deg:8, Dist:8>>) ->
+  {Deg*3, Dist}.
 
 
