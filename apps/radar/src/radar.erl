@@ -30,7 +30,8 @@
           uptime = 0,
           rec_msg = 0,
           num_nodes = 0,
-          num_radars = 0
+          num_radars = 0,
+          active_detections = 0
 }).
 
 -record(state, {
@@ -43,6 +44,7 @@
           single_sample = false,
           radar_backup,
           noti_box
+          
 }).
 
 -record(click_info, {
@@ -54,11 +56,12 @@
 -record(radar_info, {
           pos,
           angle = 0,
+          overlay,
           bitmap,
           node,
           pid,
           name,
-          samples
+          samples = []
 }).
 
 -define(SUS_BUTTON, 100).
@@ -73,9 +76,11 @@
 
 -define(RADAR_DRAWING, "imgs/radar-normal.png").
 -define(RADAR_DRAWING_SELECTED, "imgs/radar-selected.png").
+-define(DETECTIONS_DRAWING, "imgs/detections.png").
 
 -define(BITMAP_WIDTH, 25).
 -define(BITMAP_HEIGHT, 20).
+-define(DETECTION_EDGE, 20).
 
 %%%===================================================================
 %%% API
@@ -155,17 +160,18 @@ reconnect_operator(Node) ->
                               {ok, State :: term(), hibernate} |
                               {stop, Reason :: term()} |
                               ignore.
-%%  ----MainSizer vertical----
-%%    ----Status bar----
-%%    ------Canvas------
-%%    |                |
-%%    |                |
-%%    |                |
-%%    ------------------
-%%    -Button grid sizer-
-%%    | butt1    butt2 |
-%%    | butt3    butt4 |
-%%    ------------------
+%%  ---------------MainSizer vertical-----------
+%%    ----------------Status bar-------------
+%%      ----------------Canvas--------------
+%%    |                                        |
+%%    |                                        |
+%%    |                                        |
+%%    ------------------------------------------
+%%    -Button grid sizer---Notifications Panel-- 
+%%                         ____________________
+%%    | butt1    butt2 |  |                    |
+%%    | butt3    butt4 |  |____________________|
+%%    ------------------------------------------
 %%
 %%
 init([]) ->
@@ -175,13 +181,18 @@ init([]) ->
   Frame = wxFrame:new(wx:null(), 1, "Radar"),
   % spawn windows
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
+  TopSizer = wxBoxSizer:new(?wxHORIZONTAL),
   StatusBar = wxStatusBar:new(Frame),
-  wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [150, 200, 100]}]),
+  wxStatusBar:setFieldsCount(StatusBar, 2, [{widths, [-2, -3]}]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: 00:00:00", [{number, 0}]),
+  DetectionsPanel = wxPanel:new(Frame, []),
+  wxPanel:setBackgroundColour(DetectionsPanel, ?wxWHITE),
+  DetectionsBmp = get_image_bitmap(?DETECTIONS_DRAWING, 0, ?DETECTION_EDGE, ?DETECTION_EDGE),
+  DetectionsStaticBmp = wxStaticBitmap:new(DetectionsPanel, -1, DetectionsBmp),
   Canvas = wxPanel:new(Frame, [{size, {800, 500}}, {style, ?wxBORDER_SIMPLE}]),
 
   wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
-  Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
+  Font = wxFont:new(10, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxStatusBar:setFont(StatusBar, Font),
   wxFont:destroy(Font),
@@ -236,10 +247,11 @@ init([]) ->
                    {flag, ?wxALL bor ?wxALIGN_LEFT},
                    {border, 5}
                  ]),
-  wxBoxSizer:add(MainSizer, StatusBar, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(TopSizer, StatusBar, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(TopSizer, DetectionsPanel, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
+  wxBoxSizer:add(MainSizer, TopSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, Canvas, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
   wxBoxSizer:add(MainSizer, BottomSizer, [{flag, ?wxALL bor ?wxALIGN_CENTRE}, {border, 5}]),
-
   wxWindow:setSizer(Frame, MainSizer),
   wxSizer:setSizeHints(MainSizer, Frame),
 
@@ -281,12 +293,20 @@ handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
   Bmp = get_image_bitmap(?RADAR_DRAWING),
   Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
-  NewRadars = Radars#{X => #radar_info{pos = Pos, bitmap = Bmp}},
-  {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}};
+  Overlay = wxOverlay:new(),
+  NewRadars = Radars#{X => #radar_info{overlay = Overlay, pos = Pos, bitmap = Bmp}},
+  {noreply, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, {redraw_radar, X}]}};
 
 handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
+  Prev = State#state.click_info#click_info.key,
   case find_object(reclip(X, Y, wxPanel:getSize(State#state.canvas)), State#state.radars) of
     none ->
+      {noreply, State};
+    {Prev, _} ->
+      spawn(fun() ->
+        gen_server:cast({global, ?SERVER}, {Prev,
+                                               [{ultrasonic, 0, 150}, {ultrasonic, 45, 150}, {ultrasonic, 90, 150}]
+                                              }) end),
       {noreply, State};
     {SelectionKey, Object} ->
       Env = wx:get_env(),
@@ -440,27 +460,29 @@ handle_event(#wx{} = Cmd, State) ->
 
 handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State) ->
   #{pid := Pid, name:= Name} = Info,
+  Overlay = wxOverlay:new(),
   NewRadars = case dets:lookup(State#state.radar_backup, Name) of
     [] ->
       Bmp = get_image_bitmap(?RADAR_DRAWING),
       {W, H} = wxPanel:getSize(State#state.canvas),
       Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
-      Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
-    [{_, #radar_info{pos = {X, Y}, angle = Angle}}]->
+      Radars#{Pid => #radar_info{overlay = Overlay, name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
+    [{_, #radar_info{pos = {X, Y}, angle = Angle}}] ->
       Bmp = get_image_bitmap(?RADAR_DRAWING, Angle),
       Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
-      Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
+      Radars#{Pid => #radar_info{overlay = Overlay, name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
-  {reply, ok, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, redraw_radars]}};
+  {reply, ok, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, {redraw_radar, Pid}]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
   #{pid := Pid} = Info,
   try maps:take(Pid, State#state.radars) of
-    {#radar_info{name = Name, bitmap = Bitmap} = RadarInfo, NewRadars} ->
-      NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
+    {#radar_info{name = Name, bitmap = Bitmap, overlay = Overlay} = RadarInfo, NewRadars} ->
+      NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined, overlay = undefined},
       dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
       wxBitmap:destroy(Bitmap),
+      wxOverlay:destroy(Overlay),
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
                               click_info = ClickInfo#click_info{selected = NewSelected}
@@ -471,11 +493,15 @@ handle_call({disconnect_radar, _Node, Info}, _From,
   end;
 
 handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap,
+                                      overlay = Overlay, node = INode} = RadarInfo) ->
                               case INode of
                                 Node ->
                                   wxBitmap:destroy(Bitmap),
-                                  NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
+                                  wxOverlay:destroy(Overlay),
+                                  NewRadarInfo = RadarInfo#radar_info{bitmap = undefined,
+                                                                      pid = undefined,
+                                                                      overlay = undefined},
                                   dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
                                   false;
                                 _ -> true
@@ -501,7 +527,7 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                            Info#radar_info{bitmap = Bmp, angle = Angle}
                        end, State#state.radars) of
     NewRadars ->
-      {reply, ok, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
+      {reply, ok, State#state{radars = NewRadars}, {continue, {redraw_radar, Key}}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
@@ -524,9 +550,9 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_cast({Pid, Samples}, State) when is_pid(Pid) andalso is_list(Samples) ->
+handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) andalso is_list(Samples) ->
   try maps:update_with(Pid, fun(#radar_info{samples = OldSamples} = RadarInfo) ->
-                            NewSamples = [Samples | OldSamples],
+                            NewSamples = Samples ++ OldSamples,
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
@@ -561,10 +587,15 @@ handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
 handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap,
+                                      overlay = Overlay, node = INode} = RadarInfo) ->
                               case INode of
-                                Node -> wxBitmap:destroy(Bitmap),
-                                  NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
+                                Node ->
+                                  wxBitmap:destroy(Bitmap),
+                                  wxOverlay:destroy(Overlay),
+                                  NewRadarInfo = RadarInfo#radar_info{bitmap = undefined,
+                                                                      pid = undefined,
+                                                                      overlay = undefined},
                                   dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
                                  false;
                                 _ -> true
@@ -611,6 +642,29 @@ do_cont(redraw_radars, State) ->
   redraw_radars(State#state.canvas, State#state.radars, State#state.click_info#click_info.selected),
   State;
 
+do_cont({redraw_radar, Key}, State) ->
+  DC = wxWindowDC:new(State#state.canvas),
+  Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
+                    ?wxFONTWEIGHT_EXTRABOLD),
+  wxDC:setFont(DC, Font),
+  wxFont:destroy(Font),
+  #{Key := #radar_info{overlay = Overlay, bitmap = Bmp, pos = {X, Y} = Pos, angle = Angle, node = Node}} = State#state.radars,
+	DCO = wxDCOverlay:new(Overlay, DC),
+  wxDCOverlay:clear(DCO),
+  wxOverlay:reset(Overlay),
+	wxDCOverlay:clear(DCO),
+  case sets:is_element(Key, State#state.click_info#click_info.selected) of
+    true ->
+      PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
+      LastText = io_lib:format("~p", [Angle]),
+      FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
+      wxDC:drawLabel(DC, FinalText,
+      {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]);
+    false -> ok
+  end,
+  wxDC:drawBitmap(DC, Bmp, Pos),
+  State;
+
 do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
   case wxTextCtrl:getNumberOfLines(TextCtrl) of
     N when N > 20 ->
@@ -644,6 +698,19 @@ do_cont(dec_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = S
 
 do_cont(set_radar_nums, #state{status_bar_stats = Stats} = State) ->
   State#state{status_bar_stats = Stats#stats{num_radars = map_size(State#state.radars)}};
+
+%% [{ldr, Angle, Distance}]
+%% [{ultrasonic, Angle, Distance}]
+do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
+  #{Pid := #radar_info{overlay = Overlay, pos = Pos, samples = Samples, angle = RadarAngle}} = State#state.radars,
+  DC = wxWindowDC:new(Canvas),
+  DCO = wxDCOverlay:new(Overlay, DC),
+  % wxDCOverlay:clear(DCO),
+  lists:foreach(fun(Sample) -> draw_sample(Sample, Pos, RadarAngle, DC) end, Samples), 
+  wxDCOverlay:destroy(DCO),
+	wxWindowDC:destroy(DC),
+  State;
+
 
 do_cont(_Continue, State) ->
   State.
@@ -862,6 +929,24 @@ is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
       false
   end.
 
+
+draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = Overlay, bitmap = Bmp, node = Node}, false, DC) ->
+  DCO = wxDCOverlay:new(Overlay, DC),
+  wxDCOverlay:clear(DCO),
+  wxOverlay:reset(Overlay),
+  wxDC:drawBitmap(DC, Bmp, Pos),
+  ok;
+draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = Overlay, bitmap = Bmp, node = Node}, true, DC) ->
+  DCO = wxDCOverlay:new(Overlay, DC),
+  wxDCOverlay:clear(DCO),
+  wxOverlay:reset(Overlay),
+  wxDC:drawBitmap(DC, Bmp, Pos),
+  PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
+  LastText = io_lib:format("~p", [Angle]),
+  FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
+  wxDC:drawLabel(DC, FinalText,
+        {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]),
+  ok.
 redraw_radars(Canvas, Radars, Selected) ->
   {W, H} = wxPanel:getSize(Canvas),
   Bitmap = wxBitmap:new(W, H),
@@ -871,18 +956,8 @@ redraw_radars(Canvas, Radars, Selected) ->
                               ?wxFONTWEIGHT_EXTRABOLD),
             wxDC:setFont(DC, Font),
             wxFont:destroy(Font),
-            maps:foreach(fun
-                           (Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, bitmap = Bmp, node = Node})->
-                              case sets:is_element(Key, Selected) of
-                                true ->
-                                  PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
-                                  LastText = io_lib:format("~p", [Angle]),
-                                  FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
-                                  wxDC:drawBitmap(DC, Bmp, Pos),
-                                  wxDC:drawLabel(DC, FinalText,
-                                  {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]);
-                                false -> wxDC:drawBitmap(DC, Bmp, Pos)
-                              end
+            maps:foreach(fun(Key, RadarInfo) ->
+                          draw_radar_on_dc(Key, RadarInfo, sets:is_element(Key, Selected), DC)
                          end, Radars)
         end,
   draw(Canvas, Bitmap, Fun),
@@ -901,20 +976,23 @@ draw(Canvas, Bitmap, Fun) ->
   wxMemoryDC:destroy(MemoryDC).
 
 
-get_image_bitmap(Path) ->
-  get_image_bitmap(Path, 0).
-
-get_image_bitmap(Path, Angle) ->
-  Rads = -Angle / 180 * math:pi(),
-  Image = wxImage:new(Path),
-  Image2 = wxImage:scale(Image, ?BITMAP_WIDTH*2, ?BITMAP_HEIGHT*2, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
-  wxImage:setMaskColour(Image2, 255, 255, 255),
-  Image3 = wxImage:rotate(Image2, Rads, {?BITMAP_WIDTH, ?BITMAP_HEIGHT}, [{interpolating, true}]),
-  Bmp = wxBitmap:new(Image3),
-  wxImage:destroy(Image),
-  wxImage:destroy(Image2),
-  wxImage:destroy(Image3),
-  Bmp.
+  get_image_bitmap(Path) ->
+    get_image_bitmap(Path, 0).
+  
+  get_image_bitmap(Path, Angle) ->
+    get_image_bitmap(Path, Angle, 2*?BITMAP_WIDTH, 2*?BITMAP_HEIGHT).
+  
+  get_image_bitmap(Path, Angle, Width, Height) ->
+    Rads = -Angle / 180 * math:pi(),
+    Image = wxImage:new(Path),
+    Image2 = wxImage:scale(Image, Width, Height, [{quality, ?wxIMAGE_QUALITY_HIGH}]),
+    wxImage:setMaskColour(Image2, 255, 255, 255),
+    Image3 = wxImage:rotate(Image2, Rads, {?BITMAP_WIDTH, ?BITMAP_HEIGHT}, [{interpolating, true}]),
+    Bmp = wxBitmap:new(Image3),
+    wxImage:destroy(Image),
+    wxImage:destroy(Image2),
+    wxImage:destroy(Image3),
+    Bmp.
 
 update_angle(Key, Angle) ->
   gen_server:call({global, ?SERVER}, {update_angle, Key, Angle}).
@@ -953,3 +1031,13 @@ append_textbox(TextCtrl, Str, Args)->
   TimeStr = get_current_time_str(hms),
   wxTextCtrl:appendText(TextCtrl, io_lib:format("~s: " ++ Str, [TimeStr | Args])),
   ok.
+
+draw_sample({_SampleType, Angle, Dist}, {X, Y}, RadarAngle, DC) ->
+  {Xc, Yc} = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},        % Centered around the middle of the radar bitmap
+  io:format("Radar Angle, Angle ~p~n", [{RadarAngle, Angle}]),
+  Rads = (RadarAngle - Angle) / 180 * math:pi(),
+  {Xs, Ys} = {Xc + Dist*math:cos(Rads), Yc + Dist*math:sin(Rads)},
+  RedBrush = wxBrush:new(?wxRED),
+  
+  wxDC:setBrush(DC, RedBrush),
+  wxDC:drawCircle(DC, {round(Xs), round(Ys)}, 3).
