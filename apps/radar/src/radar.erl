@@ -458,7 +458,7 @@ handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked
   spawn(fun() ->
             slider_dialog(Env, {0, 180, 90},
                           fun(Angle) ->
-                              io:format("user clicked ~p~n", [Angle])
+                              send_telemeter(Angle)
                           end, "Set Radar Angle")
         end),
   {noreply, State};
@@ -563,6 +563,15 @@ handle_call({send_file, File}, _From,
   case sets:is_empty(Selected) of
     true -> operator:send_file(all, File);
     false -> operator:send_file(sets:to_list(Selected), File)
+  end,
+  {reply, ok, State};
+
+
+handle_call({send_telemeter, File}, _From,
+              #state{click_info = #click_info{selected = Selected}} = State) ->
+  case sets:is_empty(Selected) of
+    true -> operator:telemeter(all, File);
+    false -> operator:telemeter(sets:to_list(Selected), File)
   end,
   {reply, ok, State};
 
@@ -1080,6 +1089,9 @@ get_image_bitmap(Path, Angle, Width, Height) ->
 
 update_angle(Key, Angle) ->
   gen_server:call({global, ?SERVER}, {update_angle, Key, Angle}).
+
+send_telemeter(Angle) ->
+  gen_server:call({global, ?SERVER}, {send_telemeter, Angle}).
 
 reclip(X, Y, {W, H}) ->
   F = fun(N, Min, Max) ->
