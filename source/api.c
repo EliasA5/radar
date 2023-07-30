@@ -195,11 +195,11 @@ void file_rec_s_enter()
 
 void file_rec_s_leave()
 {
-	// write_flash(file_buf, file_size);
 	uchar *seg = segments[fmanager.file_to_replace];
+	write_flash(seg, file_buf, file_buf_idx);
+	fmanager.valid[fmanager.file_to_replace] = 1;
 	if((++fmanager.file_to_replace) > 2)
 		fmanager.file_to_replace = 0;
-	write_flash(seg, file_buf, file_buf_idx);
 	add_ack_tx_queue(MAKEACK(file_rec_s));
 }
 
@@ -367,33 +367,33 @@ void file_leave()
 		case 1:
 			disable_t0timer();
 			inc_lcd_leave();
-			fmanager.curr_file += 2;
+			fmanager.file[fmanager.curr_file] += 2;
 			break;
 		case 2:
 			disable_t0timer();
 			dec_lcd_leave();
-			fmanager.curr_file += 2;
+			fmanager.file[fmanager.curr_file] += 2;
 			break;
 		case 3:
 			disable_t0timer();
 			rra_lcd_leave();
-			fmanager.curr_file += 2;
+			fmanager.file[fmanager.curr_file] += 2;
 			break;
 		case 4:
-			fmanager.curr_file += 2;
+			fmanager.file[fmanager.curr_file] += 2;
 			break;
 		case 5:
-			fmanager.curr_file += 1;
+			fmanager.file[fmanager.curr_file] += 1;
 			break;
 		case 6:
 			disable_t0timer();
 			disable_ultrasonic();
-			fmanager.curr_file += 2;
+			fmanager.file[fmanager.curr_file] += 2;
 			break;
 		case 7:
 			disable_t0timer();
 			disable_ultrasonic();
-			fmanager.curr_file += 3;
+			fmanager.file[fmanager.curr_file] += 3;
 			break;
 		case 8:
 			state = idle;
