@@ -1153,9 +1153,9 @@ append_textbox(TextCtrl, Str, Args)->
   ok.
 
 draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, DC) ->
-  {Xc, Yc} = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},        % Centered around the middle of the radar bitmap
+  {Xc, Yc} = Center = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},        % Centered around the middle of the radar bitmap
   Rads = (RadarAngle - Angle) / 180 * math:pi(),
-  {Xs, Ys} = {Xc + Dist*math:cos(Rads), Yc + Dist*math:sin(Rads)},
+  {Xs, Ys} = Goal = {round(Xc + Dist*math:cos(Rads)), round(Yc + Dist*math:sin(Rads))},
   Brush = case SampleType of
     ultrasonic ->
       wxBrush:new(?wxRED);
@@ -1163,6 +1163,6 @@ draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, 
       wxBrush:new(?wxBLUE)
     end,
   wxDC:setBrush(DC, Brush),
-
+  wxDC:drawLine(DC, Center, Goal),
   TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
-  wxDC:drawCircle(DC, {round(Xs), round(Ys)}, 2*TimeDiff).
+  wxDC:drawCircle(DC, {Xs, Ys}, 2*TimeDiff).
