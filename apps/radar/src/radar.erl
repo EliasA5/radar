@@ -628,7 +628,7 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
   UpdatedState = State#state{status_bar_stats = Stats#stats{uptime = Uptime + 1}},
   case Uptime rem 3 of
     0 ->
-      {noreply, UpdatedState, {continue, draw_samples}};
+      {noreply, UpdatedState, {continue, [draw_samples, set_detections, redraw_detections_bar]}};
     _ ->
       {noreply, UpdatedState}
   end;
