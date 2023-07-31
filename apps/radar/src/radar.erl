@@ -75,11 +75,14 @@
 -define(STATS_BUTTON, 106).
 -define(SFILE_BUTTON, 107).
 -define(STELEM_BUTTON, 108).
+-define(BACKGROUND_BUTTON, 109).
+-define(IDLE_BUTTON, 110).
+-define(EMPTY_BUTTON, 111).
 
 -define(RADAR_DRAWING, "imgs/radar-normal.png").
 -define(RADAR_DRAWING_SELECTED, "imgs/radar-selected.png").
 -define(DETECTIONS_DRAWING, "imgs/detections.png").
--define(BACKGROUND_DRAWING, "imgs/background.png").
+-define(DEFAULT_BACKGROUND_DRAWING, "background.png").
 
 -define(BITMAP_WIDTH, 25).
 -define(BITMAP_HEIGHT, 20).
@@ -199,7 +202,7 @@ init([]) ->
   wxStatusBar:setFont(DetectionsText, Font),
   wxFont:destroy(Font),
   BottomSizer = wxBoxSizer:new(?wxHORIZONTAL),
-  ButtonGridSizer = wxGridSizer:new(3, 3, 2, 2), % rows, cols, vgap, hgap
+  ButtonGridSizer = wxGridSizer:new(3, 4, 2, 2), % rows, cols, vgap, hgap
 
   ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
   wxGridSizer:add(ButtonGridSizer, ScanUsButton,
@@ -211,6 +214,10 @@ init([]) ->
 
   DualScanButton = wxButton:new(Frame, ?SDUAL_BUTTON, [{label, "Dual Scan"}]),
   wxGridSizer:add(ButtonGridSizer, DualScanButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT}]),
+
+  IdleButton = wxButton:new(Frame, ?IDLE_BUTTON, [{label, "Idle"}]),
+  wxGridSizer:add(ButtonGridSizer, IdleButton,
                   [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT}]),
 
   File1Button = wxButton:new(Frame, ?FILE1_BUTTON, [{label, "Start file 1"}]),
@@ -225,22 +232,31 @@ init([]) ->
   wxGridSizer:add(ButtonGridSizer, File3Button,
                   [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT}]),
 
+  EmptyButton = wxButton:new(Frame, ?EMPTY_BUTTON, [{label, "Empty"}]),
+  wxGridSizer:add(ButtonGridSizer, EmptyButton,
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT}]),
+
   ShowStatsButton = wxButton:new(Frame, ?STATS_BUTTON, [{label, "Show Stats"}]),
   wxGridSizer:add(ButtonGridSizer, ShowStatsButton,
                   [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_LEFT}]),
 
   SendFileButton = wxButton:new(Frame, ?SFILE_BUTTON, [{label, "Send File"}]),
   wxGridSizer:add(ButtonGridSizer, SendFileButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_CENTER}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM}]),
 
   SendTelemer = wxButton:new(Frame, ?STELEM_BUTTON, [{label, "Scan Angle"}]),
   wxGridSizer:add(ButtonGridSizer, SendTelemer,
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
+
+  BackgroundButton = wxButton:new(Frame, ?BACKGROUND_BUTTON, [{label, "Background"}]),
+  wxGridSizer:add(ButtonGridSizer, BackgroundButton,
                   [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
 
   NotificationsBox = wxTextCtrl:new(Frame, ?wxID_ANY, [
                   {style, ?wxTE_BESTWRAP bor ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_LEFT},
                   {size, {450, 100}}
                 ]),
+
   wxBoxSizer:add(BottomSizer, ButtonGridSizer, [
                   {flag, ?wxALL bor ?wxALIGN_LEFT},
                   {border, 5}
@@ -274,15 +290,15 @@ init([]) ->
   wxIcon:destroy(Icon),
   wxFrame:show(Frame),
   {W, H} = wxPanel:getSize(Canvas),
-  BackgroundBitmap = get_image_bitmap(?BACKGROUND_DRAWING, 0, W, H),
+  BackgroundBitmap = get_image_bitmap("backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING, 0, W, H),
   BackgroundOverlay = wxOverlay:new(),
-  Background = {BackgroundOverlay, BackgroundBitmap},
+  Background = {BackgroundOverlay, BackgroundBitmap, "backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING},
 
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
               background = Background, noti_box = NotificationsBox, status_bar = StatusBar,
               status_bar_stats = #stats{}, click_info = #click_info{selected = sets:new()}, radars = #{}},
-       {continue, [redraw_stat_bar, redraw_detections_bar, redraw_background,
+       {continue, [redraw_stat_bar, redraw_detections_bar, load_background, redraw_background,
        {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
   }.
 
@@ -452,7 +468,7 @@ handle_event(#wx{id=?STATS_BUTTON, event=#wxCommand{type=command_button_clicked}
 handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame} = State) ->
   Env = wx:get_env(),
-  spawn(fun() -> send_file_dialog(Env,
+  spawn(fun() -> file_dialog(Env,
                                   fun parse_and_send_file/1,
                                   "Pick a file to send")
         end),
@@ -468,6 +484,20 @@ handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked
                           end, "Set Radar Angle")
         end),
   {noreply, State};
+
+
+handle_event(#wx{id=?BACKGROUND_BUTTON, event=#wxCommand{type=command_button_clicked}},
+             #state{frame = _Frame} = State) ->
+  Env = wx:get_env(),
+  {ok, CurrentDir} = file:get_cwd(),
+
+  spawn(fun() -> file_dialog(Env,
+                       fun(Path) -> gen_server:call({global, ?SERVER}, {new_background, Path}) end,
+                       "Pick a Background", CurrentDir ++ "/backgrounds/", ?DEFAULT_BACKGROUND_DRAWING)
+
+end),
+{noreply, State};
+
 
 handle_event(#wx{} = Cmd, State) ->
   io:format("got event: ~w~n", [Cmd]),
@@ -580,6 +610,13 @@ handle_call({send_telemeter, File}, _From,
     false -> operator:telemeter(sets:to_list(Selected), File)
   end,
   {reply, ok, State};
+
+handle_call({new_background, NewPath}, _From,
+              #state{background = {BackgroundOverlay, BackgroundBitmap,
+                                                   _BackgroundPath}} = State) ->
+  {reply, ok, State#state{background = {BackgroundOverlay, BackgroundBitmap, NewPath}},
+  {continue, [load_background, redraw_background, redraw_radars]}};
+
 
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
@@ -733,10 +770,18 @@ do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
   append_textbox(TextCtrl, Str, Args),
   State;
 
+do_cont(load_background, #state{background = Background, canvas = Canvas} = State) ->
+  {BackgroundOverlay, BackgroundBitmap, BackgroundPath} = Background,
+  wxBitmap:destroy(BackgroundBitmap),
+  {W, H} = wxPanel:getSize(Canvas),
+  NewBackgroundBitmap = get_image_bitmap(BackgroundPath, 0, W, H),
+  NewBackground = {BackgroundOverlay, NewBackgroundBitmap, BackgroundPath},
+  State#state{background = NewBackground};
+
 do_cont(redraw_background, #state{background = Background,canvas = Canvas} = State) ->
   redraw_background(Canvas, Background),
-  State; 
-  
+  State;
+
 
 do_cont(redraw_stat_bar, #state{status_bar_stats = #stats{num_radars = NumRadars,
                                                           num_nodes = NumNodes} = _Stats
@@ -922,18 +967,23 @@ error_dialog(Env, Title, ErrorMessage) ->
   wxMessageDialog:destroy(ErrorDialog).
 
 
--spec send_file_dialog(Env :: any(),
+-spec file_dialog(Env :: any(),
                        Callback :: fun((string()) -> any()),
-                       Title :: string()) -> ok.
+                       Title :: string(),
+                       DefaultDir :: string(),
+                       DefaultFile :: string()) -> ok.
 
-send_file_dialog(Env, Callback, Title) ->
+file_dialog(Env, Callback, Title) ->
+  file_dialog(Env, Callback, Title, "~", "").
+
+file_dialog(Env, Callback, Title, DefaultDir, DefaultFile) ->
   wx:set_env(Env),
   FileDialog = wxFileDialog:new(wx:null(),
                                 [
                                  {message, Title},
                                  {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST bor ?wxFD_PREVIEW},
-                                 {defaultDir, "~"},
-                                 {defaultFile, ""}
+                                 {defaultDir, DefaultDir},
+                                 {defaultFile, DefaultFile}
                                 ]),
   case wxFileDialog:showModal(FileDialog) of
     ?wxID_OK ->
@@ -1051,13 +1101,15 @@ draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = 
   wxDCOverlay:destroy(DCO),
   ok.
 
-redraw_radars(#state{canvas = Canvas, background = {BOverlay, BBitmap}, click_info = #click_info{selected = Selected}, radars = Radars} = _State) ->
+redraw_radars(#state{canvas = Canvas, background = {
+  BackgroundOverlay, BackgroundBitmap, _BackgroundPath},
+  click_info = #click_info{selected = Selected}, radars = Radars} = _State) ->
   {W, H} = wxPanel:getSize(Canvas),
   Bitmap = wxBitmap:new(W, H),
   Fun = fun(DC) ->
-            DCO = wxDCOverlay:new(BOverlay, DC),
+            DCO = wxDCOverlay:new(BackgroundOverlay, DC),
             wxDCOverlay:clear(DCO),
-            wxDC:drawBitmap(DC, BBitmap, {0, 0}),
+            wxDC:drawBitmap(DC, BackgroundBitmap, {0, 0}),
 
             Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
                               ?wxFONTWEIGHT_EXTRABOLD),
@@ -1084,7 +1136,7 @@ draw(Canvas, Bitmap, Fun) ->
   wxPaintDC:destroy(CDC),
   wxMemoryDC:destroy(MemoryDC).
 
-redraw_background(Canvas, {BackgroundOverlay, BackgroundBitmap} = _Background) ->
+redraw_background(Canvas, {BackgroundOverlay, BackgroundBitmap, _BackgroundPath} = _Background) ->
   BackgroundDC = wxWindowDC:new(Canvas),
   wxOverlay:reset(BackgroundOverlay),
   BackgroundDCO = wxDCOverlay:new(BackgroundOverlay, BackgroundDC),
@@ -1092,7 +1144,7 @@ redraw_background(Canvas, {BackgroundOverlay, BackgroundBitmap} = _Background) -
   %% timer:sleep(2000), % Just temporary to debug background effects
   wxDCOverlay:destroy(BackgroundDCO),
   wxWindowDC:destroy(BackgroundDC).
-  
+
 get_image_bitmap(Path) ->
   get_image_bitmap(Path, 0).
 
@@ -1134,7 +1186,6 @@ parse_and_send_file(Path) ->
       error_dialog(Env, "Error", Msg)
   end,
   ok.
-
 
 get_current_time_str(Type) ->
   {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:local_time(),
