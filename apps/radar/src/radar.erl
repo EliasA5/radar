@@ -1087,11 +1087,11 @@ draw(Canvas, Bitmap, Fun) ->
 redraw_background(Canvas, {BackgroundOverlay, BackgroundBitmap} = _Background) ->
   BackgroundDC = wxWindowDC:new(Canvas),
   wxOverlay:reset(BackgroundOverlay),
-  _BackgroundDCO = wxDCOverlay:new(BackgroundOverlay, BackgroundDC),
+  BackgroundDCO = wxDCOverlay:new(BackgroundOverlay, BackgroundDC),
   wxDC:drawBitmap(BackgroundDC, BackgroundBitmap, {0, 0}),
   %% timer:sleep(2000), % Just temporary to debug background effects
-  wxWindowDC:destroy(BackgroundDC),
-  wxBitmap:destroy(BackgroundBitmap).
+  wxDCOverlay:destroy(BackgroundDCO),
+  wxWindowDC:destroy(BackgroundDC).
   
 get_image_bitmap(Path) ->
   get_image_bitmap(Path, 0).
