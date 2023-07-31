@@ -37,6 +37,7 @@
 -record(state, {
           frame,
           canvas,
+          background,
           detections_bar,
           status_bar,
           status_bar_stats,
@@ -78,6 +79,7 @@
 -define(RADAR_DRAWING, "imgs/radar-normal.png").
 -define(RADAR_DRAWING_SELECTED, "imgs/radar-selected.png").
 -define(DETECTIONS_DRAWING, "imgs/detections.png").
+-define(BACKGROUND_DRAWING, "imgs/background.png").
 
 -define(BITMAP_WIDTH, 25).
 -define(BITMAP_HEIGHT, 20).
@@ -191,8 +193,6 @@ init([]) ->
   DetectionsBmp = get_image_bitmap(?DETECTIONS_DRAWING, 0, ?DETECTION_EDGE, ?DETECTION_EDGE),
   wxStaticBitmap:new(DetectionsPanel, -1, DetectionsBmp),
   Canvas = wxPanel:new(Frame, [{size, {1040, 650}}, {style, ?wxBORDER_SIMPLE}]),
-
-  wxPanel:setBackgroundColour(Canvas, ?wxWHITE),
   Font = wxFont:new(9, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL, ?
                     wxFONTWEIGHT_BOLD),
   wxStatusBar:setFont(StatusBar, Font),
@@ -273,11 +273,17 @@ init([]) ->
   wxFrame:setIcon(Frame, Icon),
   wxIcon:destroy(Icon),
   wxFrame:show(Frame),
+  {W, H} = wxPanel:getSize(Canvas),
+  BackgroundBitmap = get_image_bitmap(?BACKGROUND_DRAWING, 0, W, H),
+  BackgroundOverlay = wxOverlay:new(),
+  Background = {BackgroundOverlay, BackgroundBitmap},
+
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
-              noti_box = NotificationsBox, status_bar = StatusBar, status_bar_stats = #stats{},
-              click_info = #click_info{selected = sets:new()}, radars = #{}},
-       {continue, [redraw_stat_bar, redraw_detections_bar, {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
+              background = Background, noti_box = NotificationsBox, status_bar = StatusBar,
+              status_bar_stats = #stats{}, click_info = #click_info{selected = sets:new()}, radars = #{}},
+       {continue, [redraw_stat_bar, redraw_detections_bar, redraw_background,
+       {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
   }.
 
 %%--------------------------------------------------------------------
@@ -349,7 +355,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
                             Radars, Selected),
       {noreply, State#state{radars = NewRadars,
                             click_info = #click_info{selected = sets:new()}
-                           }, {continue, [redraw_radars]}};
+                           }, {continue, redraw_radars}};
     {Key, _Object} ->
       NewRadars = Update_Radar_Bitmaps(Key, Radars, ?RADAR_DRAWING_SELECTED),
       wxPanel:connect(State#state.canvas, motion),
@@ -689,7 +695,7 @@ handle_continue(Continue, State) ->
   {noreply, do_cont(Continue, State)}.
 
 do_cont(redraw_radars, State) ->
-  redraw_radars(State#state.canvas, State#state.radars, State#state.click_info#click_info.selected),
+  redraw_radars(State),
   State;
 
 do_cont({redraw_radar, Key}, State) ->
@@ -726,6 +732,11 @@ do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
   end,
   append_textbox(TextCtrl, Str, Args),
   State;
+
+do_cont(redraw_background, #state{background = Background,canvas = Canvas} = State) ->
+  redraw_background(Canvas, Background),
+  State; 
+  
 
 do_cont(redraw_stat_bar, #state{status_bar_stats = #stats{num_radars = NumRadars,
                                                           num_nodes = NumNodes} = _Stats
@@ -1040,19 +1051,23 @@ draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = 
   wxDCOverlay:destroy(DCO),
   ok.
 
-redraw_radars(Canvas, Radars, Selected) ->
+redraw_radars(#state{canvas = Canvas, background = {BOverlay, BBitmap}, click_info = #click_info{selected = Selected}, radars = Radars} = _State) ->
   {W, H} = wxPanel:getSize(Canvas),
   Bitmap = wxBitmap:new(W, H),
   Fun = fun(DC) ->
-            wxDC:clear(DC),
+            DCO = wxDCOverlay:new(BOverlay, DC),
+            wxDCOverlay:clear(DCO),
+            wxDC:drawBitmap(DC, BBitmap, {0, 0}),
+
             Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
                               ?wxFONTWEIGHT_EXTRABOLD),
             wxDC:setFont(DC, Font),
             wxFont:destroy(Font),
             maps:foreach(fun(Key, RadarInfo) ->
-                          wxOverlay:reset(RadarInfo#radar_info.overlay),
-                          draw_radar_on_dc(Key, RadarInfo, sets:is_element(Key, Selected), DC)
-                         end, Radars)
+                             wxOverlay:reset(RadarInfo#radar_info.overlay),
+                             draw_radar_on_dc(Key, RadarInfo, sets:is_element(Key, Selected), DC)
+                         end, Radars),
+            wxDCOverlay:destroy(DCO)
         end,
   draw(Canvas, Bitmap, Fun),
   wxBitmap:destroy(Bitmap).
@@ -1069,6 +1084,15 @@ draw(Canvas, Bitmap, Fun) ->
   wxPaintDC:destroy(CDC),
   wxMemoryDC:destroy(MemoryDC).
 
+redraw_background(Canvas, {BackgroundOverlay, BackgroundBitmap} = _Background) ->
+  BackgroundDC = wxWindowDC:new(Canvas),
+  wxOverlay:reset(BackgroundOverlay),
+  _BackgroundDCO = wxDCOverlay:new(BackgroundOverlay, BackgroundDC),
+  wxDC:drawBitmap(BackgroundDC, BackgroundBitmap, {0, 0}),
+  %% timer:sleep(2000), % Just temporary to debug background effects
+  wxWindowDC:destroy(BackgroundDC),
+  wxBitmap:destroy(BackgroundBitmap).
+  
 get_image_bitmap(Path) ->
   get_image_bitmap(Path, 0).
 
