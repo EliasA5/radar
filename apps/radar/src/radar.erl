@@ -206,51 +206,51 @@ init([]) ->
 
   ScanUsButton = wxButton:new(Frame, ?SUS_BUTTON, [{label, "Scan US"}]),
   wxGridSizer:add(ButtonGridSizer, ScanUsButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_LEFT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_LEFT bor ?wxEXPAND}]),
 
   ScanLdrButton = wxButton:new(Frame, ?SLDR_BUTTON, [{label, "Scan LDR"}]),
   wxGridSizer:add(ButtonGridSizer, ScanLdrButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_CENTER_HORIZONTAL}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_CENTER_HORIZONTAL bor ?wxEXPAND}]),
 
   DualScanButton = wxButton:new(Frame, ?SDUAL_BUTTON, [{label, "Dual Scan"}]),
   wxGridSizer:add(ButtonGridSizer, DualScanButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   IdleButton = wxButton:new(Frame, ?IDLE_BUTTON, [{label, "Idle"}]),
   wxGridSizer:add(ButtonGridSizer, IdleButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   File1Button = wxButton:new(Frame, ?FILE1_BUTTON, [{label, "Start file 1"}]),
   wxGridSizer:add(ButtonGridSizer, File1Button,
-                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_LEFT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_LEFT bor ?wxEXPAND}]),
 
   File2Button = wxButton:new(Frame, ?FILE2_BUTTON, [{label, "Start file 2"}]),
   wxGridSizer:add(ButtonGridSizer, File2Button,
-                  [{proportion, 0}, {flag, ?wxALIGN_CENTER}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER bor ?wxEXPAND}]),
 
   File3Button = wxButton:new(Frame, ?FILE3_BUTTON, [{label, "Start file 3"}]),
   wxGridSizer:add(ButtonGridSizer, File3Button,
-                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   EmptyButton = wxButton:new(Frame, ?EMPTY_BUTTON, [{label, "Empty"}]),
   wxGridSizer:add(ButtonGridSizer, EmptyButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   ShowStatsButton = wxButton:new(Frame, ?STATS_BUTTON, [{label, "Show Stats"}]),
   wxGridSizer:add(ButtonGridSizer, ShowStatsButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_LEFT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_LEFT bor ?wxEXPAND}]),
 
   SendFileButton = wxButton:new(Frame, ?SFILE_BUTTON, [{label, "Send File"}]),
   wxGridSizer:add(ButtonGridSizer, SendFileButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxEXPAND}]),
 
   SendTelemer = wxButton:new(Frame, ?STELEM_BUTTON, [{label, "Scan Angle"}]),
   wxGridSizer:add(ButtonGridSizer, SendTelemer,
-                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   BackgroundButton = wxButton:new(Frame, ?BACKGROUND_BUTTON, [{label, "Background"}]),
   wxGridSizer:add(ButtonGridSizer, BackgroundButton,
-                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT}]),
+                  [{proportion, 0}, {flag, ?wxALIGN_BOTTOM bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   NotificationsBox = wxTextCtrl:new(Frame, ?wxID_ANY, [
                   {style, ?wxTE_BESTWRAP bor ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_LEFT},
@@ -432,8 +432,15 @@ handle_event(#wx{id=?SDUAL_BUTTON, event=#wxCommand{type=command_button_clicked}
     true -> operator:scan_both(all);
     false -> operator:scan_both(sets:to_list(Selected))
   end,
-  % operator:go_idle(all),
   {noreply, State};
+
+  handle_event(#wx{id=?IDLE_BUTTON, event=#wxCommand{type=command_button_clicked}},
+  #state{click_info = #click_info{selected = Selected}} = State) ->
+case sets:is_empty(Selected) of
+true -> operator:go_idle(all);
+false -> operator:go_idle(sets:to_list(Selected))
+end,
+{noreply, State};
 
 handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{click_info = #click_info{selected = Selected}} = State) ->
@@ -533,7 +540,7 @@ handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State)
       Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{overlay = Overlay, name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
-  {reply, ok, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, {redraw_radar, Pid}]}};
+  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, redraw_stat_bar, {redraw_radar, Pid}]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
@@ -547,7 +554,7 @@ handle_call({disconnect_radar, _Node, Info}, _From,
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
                               click_info = ClickInfo#click_info{selected = NewSelected}
-                             }, {continue, [dec_radars, redraw_stat_bar, redraw_radars]}}
+                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, redraw_stat_bar, redraw_radars]}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
@@ -574,7 +581,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                             end, ClickInfo#click_info.selected),
   {reply, ok, State#state{radars = NewRadars,
                           click_info = ClickInfo#click_info{selected = NewSelected}
-                         }, {continue, [set_radar_nums, redraw_stat_bar, redraw_radars]}};
+                         }, {continue, [{log, "Operator ~p recconected~n", [Node]}, set_radar_nums, redraw_stat_bar, redraw_radars]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
