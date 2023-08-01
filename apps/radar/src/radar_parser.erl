@@ -83,7 +83,12 @@ make_parsers() ->
                                    {"clear_lcd", 5, 0, fun mapper_0/1},
                                    {"servo_deg", 6, 1, fun angle_mapper/2},
                                    {"servo_scan", 7, 2, fun first_smaller_deg/3},
-                                   {"sleep", 8, 0, fun mapper_0/1}]
+                                   {"sleep", 8, 0, fun mapper_0/1},
+                                   {"servo_deg_ldr", 9, 1, fun angle_mapper/2},
+                                   {"servo_scan_ldr", 10, 2, fun first_smaller_deg/3},
+                                   {"servo_deg_both", 11, 1, fun angle_mapper/2},
+                                   {"servo_scan_both", 12, 2, fun first_smaller_deg/3}
+                                  ]
   ].
 
 apply_parsers(_Parsers, []) ->
