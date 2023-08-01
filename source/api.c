@@ -312,7 +312,6 @@ void file_enter()
 	switch(*fmanager.file[fmanager.curr_file])
 	{
 		case 0: // end of file
-			fmanager.file[fmanager.curr_file] = segments[fmanager.curr_file];
 			sleep = 0;
 			break;
 		case 1:
@@ -364,6 +363,9 @@ void file_leave()
 	uchar arg2 = (*(fmanager.file[fmanager.curr_file] + 2));
 	switch(*fmanager.file[fmanager.curr_file])
 	{
+		case 0:
+			fmanager.file[fmanager.curr_file] = segments[fmanager.curr_file];
+			break;
 		case 1:
 			disable_t0timer();
 			inc_lcd_leave();
