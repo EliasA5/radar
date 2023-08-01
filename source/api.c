@@ -293,6 +293,7 @@ void ADC10_handler(int a0, int a3)
 	add_msg_tx_queue(msg, 2);
 }
 
+static uchar servo_deg_counter = 0;
 void file_enter()
 {
 	uchar sleep = 1;
@@ -336,6 +337,7 @@ void file_enter()
 			break;
 		case 6:
             set_radar_deg(arg1);
+			servo_deg_counter = 0;
             enable_ultrasonic();
             enable_t0timer(fmanager.d);
             break;
@@ -347,6 +349,32 @@ void file_enter()
 			break;
 		case 8:
 			sleep = 0;
+			break;
+		case 9:
+            set_radar_deg(arg1);
+			servo_deg_counter = 0;
+            activate_ldr();
+            enable_t0timer(fmanager.d);
+            break;
+		case 10:
+			set_radar_deg(arg1);
+			set_max_radar_deg(arg2);
+			activate_ldr();
+			enable_t0timer(fmanager.d);
+			break;
+		case 11:
+            set_radar_deg(arg1);
+			servo_deg_counter = 0;
+            enable_ultrasonic();
+			activate_ldr();
+            enable_t0timer(fmanager.d);
+            break;
+		case 12:
+			set_radar_deg(arg1);
+			set_max_radar_deg(arg2);
+			enable_ultrasonic();
+			activate_ldr();
+			enable_t0timer(fmanager.d);
 			break;
 		default:
 			sleep = 0;
@@ -400,6 +428,28 @@ void file_leave()
 		case 8:
 			state = idle;
 			break;
+		case 9:
+			disable_t0timer();
+			deactivate_ldr();
+			fmanager.file[fmanager.curr_file] += 2;
+			break;
+		case 10:
+			disable_t0timer();
+			deactivate_ldr();
+			fmanager.file[fmanager.curr_file] += 3;
+			break;
+		case 11:
+			disable_t0timer();
+			disable_ultrasonic();
+			deactivate_ldr();
+			fmanager.file[fmanager.curr_file] += 2;
+			break;
+		case 12:
+			disable_t0timer();
+			disable_ultrasonic();
+			deactivate_ldr();
+			fmanager.file[fmanager.curr_file] += 3;
+			break;
 		default:
 			state = idle;
 			break;
@@ -408,7 +458,6 @@ void file_leave()
 
 int file_handler()
 {
-	static uchar servo_deg_counter = 0;
 	uchar wakeup = 0;
 	switch(*fmanager.file[fmanager.curr_file])
 	{
@@ -442,6 +491,34 @@ int file_handler()
 			break;
 		case 8:
 
+			break;
+		case 9:
+			if((++servo_deg_counter) >= 10){
+				servo_deg_counter = 0;
+				wakeup = 1;
+				break;
+			}
+			trigger_ldr();
+			break;
+		case 10:
+			if((wakeup = update_degree()) != 0)
+				break;
+			trigger_ldr();
+			break;
+		case 11:
+			if((++servo_deg_counter) >= 10){
+				servo_deg_counter = 0;
+				wakeup = 1;
+				break;
+			}
+			trigger_ultrasonic();
+			trigger_ldr();
+			break;
+		case 12:
+			if((wakeup = update_degree()) != 0)
+				break;
+			trigger_ultrasonic();
+			trigger_ldr();
 			break;
 		default:
 			wakeup = 1;
