@@ -108,8 +108,8 @@ idle(info, {data, <<?MSPPC_ULTRASONIC:2, Degree:6>>}, Data) ->
 % ldr
 idle(info, {data, <<?MSPPC_LDR:2, Degree:6>>}, Data) ->
   {next_state, rec, Data#data{rec_type = ldr, rec_amount = 1, rec_buf = <<Degree:8>>}, ?TIMEOUT_TIME};
-idle(info, {data, Byte = <<Two:2, Arg:6>>}, _Data) ->
-  %% io:format("got unexpected data from msp430: ~w = <<~w:2,~w:6>>~n", [Byte, Two, Arg]),
+idle(info, {data, _Byte = <<_Two:2, _Arg:6>>}, _Data) ->
+  %% io:format("got unexpected data from msp430: ~w = <<~w:2,~w:6>>~n", [_Byte, _Two, _Arg]),
   keep_state_and_data;
 % commands to send
 idle(cast, {send, telemeter, Angle}, Data) ->
@@ -196,7 +196,8 @@ rec(info, {data, Byte}, #data{rec_type = ldr, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
   case format_ldr(RecBuf) of
-    {_Angle, Dist} = Sample when Dist > 0 andalso Dist < 60 ->
+    {_Angle, Dist} = Sample when Dist > 25 andalso Dist < 205 ->
+      %% io:format("ldr dist: ~p~n", [Dist]),
       gen_server:cast(Data#data.operator_port, {ldr, self(), Sample});
     _ -> ok
   end,
