@@ -284,9 +284,24 @@ int dual_d_handler()
 	return update_degree();
 }
 
+uchar cm_array[20];
+uchar find_distance(unsigned char sample)  // or cm_array global variable
+{
+   uchar distance_array[]  = {0,5,10,15,20,25,30,35,40,45,50};
+   unsigned char temp,index;
+   temp = sample - cm_array[0];
+   for(int i=1;i<20;i++)
+   {
+	if(sample - cm_array[i] < temp)
+	    index=i;
+   }
+   return distance_array[index];
+}
+
 void ADC10_handler(int a0, int a3)
 {
 	unsigned char sample = (a0 + a3) >> 5;
+	sample = find_distance(sample);
 	unsigned char msg[2];
 	msg[0] = MAKELDR(get_radar_deg());
 	msg[1] = sample;
