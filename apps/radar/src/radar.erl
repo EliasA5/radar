@@ -45,8 +45,8 @@
           radars,
           single_sample = false,
           radar_backup,
-          noti_box
-
+          noti_box,
+          file_dir = "~"
 }).
 
 -record(click_info, {
@@ -477,7 +477,9 @@ handle_event(#wx{id=?SFILE_BUTTON, event=#wxCommand{type=command_button_clicked}
   Env = wx:get_env(),
   spawn(fun() -> file_dialog(Env,
                                   fun parse_and_send_file/1,
-                                  "Pick a file to send")
+                                  "Pick a file to send",
+                                  State#state.file_dir,
+                                  "")
         end),
   {noreply, State};
 
@@ -601,13 +603,13 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
       {reply, ok, State}
   end;
 
-handle_call({send_file, File}, _From,
+handle_call({send_file, File, Path}, _From,
               #state{click_info = #click_info{selected = Selected}} = State) ->
   case sets:is_empty(Selected) of
     true -> operator:send_file(all, File);
     false -> operator:send_file(sets:to_list(Selected), File)
   end,
-  {reply, ok, State};
+  {reply, ok, State#state{file_dir = Path}};
 
 
 handle_call({send_telemeter, File}, _From,
@@ -1185,7 +1187,8 @@ reclip(X, Y, {W, H}) ->
 parse_and_send_file(Path) ->
   try radar_parser:parse_file(Path) of
     ParsedFile ->
-      gen_server:call({global, ?SERVER}, {send_file, ParsedFile})
+      DirPath = filename:dirname(Path),
+      gen_server:call({global, ?SERVER}, {send_file, ParsedFile, DirPath})
   catch
     throw:Err ->
       Env = wx:get_env(),
