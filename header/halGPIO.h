@@ -19,6 +19,7 @@ extern unsigned char update_degree(void);
 extern void activate_ldr(void);
 extern void deactivate_ldr(void);
 extern void trigger_ldr(void);
+extern void adc_set_calibrate(void);
 
 extern void delay(unsigned int);
 extern void delayms(unsigned int);

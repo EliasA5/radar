@@ -317,6 +317,7 @@ wakeup:
 	if(wakeup == 0)
 		return;
 
+	adc_set_calibrate();
 	disable_interrupts();
 	switch(lpm_mode)
 	{
@@ -491,6 +492,15 @@ void TIMER1_A1_ISR (void)
 }
 
 void ADC10_handler(int a0, int a3);
+static int background_light_a3 = 0;
+static int background_light_a0 = 0;
+static uchar calib = 0;
+
+void adc_set_calibrate()
+{
+	calib = 1;
+}
+
 // ADC10 Interrupt vector
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
 #pragma vector = ADC10_VECTOR
@@ -503,19 +513,31 @@ void ADC10_ISR (void)
 {
 	int a3 = adc10_samples[0] + adc10_samples[4] + adc10_samples[8] + adc10_samples[12];
 	int a0 = adc10_samples[3] + adc10_samples[7] + adc10_samples[11] + adc10_samples[15];
-	ADC10_handler(a0, a3);
 	ADC10SA  =    adc10_samples;
+	if(calib){
+		background_light_a0 = a0;
+		background_light_a3 = a3;
+		calib = 0;
+	}
 	switch(state)
 	{
-		case idle: break;
-		case telemeter_s: break;
-		case file_rec_s: break;
-		case sonic_d: break;
-		case ldr_d: break;
-		case dual_d: break;
-		case file_0: break;
-		case file_1: break;
-		case file_2: break;
+		case idle:
+			break;
+		case telemeter_s:
+			break;
+		case file_rec_s:
+			break;
+		case sonic_d:
+			break;
+		case ldr_d:
+			ADC10_handler(a0 - background_light_a0, a3 - background_light_a3);
+			break;
+		case dual_d:
+			ADC10_handler(a0 - background_light_a0, a3 - background_light_a3);
+			break;
+		case do_file:
+			ADC10_handler(a0 - background_light_a0, a3 - background_light_a3);
+			break;
 		default: break;
 	}
 }
