@@ -999,9 +999,6 @@ error_dialog(Env, Title, ErrorMessage) ->
                        DefaultDir :: string(),
                        DefaultFile :: string()) -> ok.
 
-file_dialog(Env, Callback, Title) ->
-  file_dialog(Env, Callback, Title, "~", "").
-
 file_dialog(Env, Callback, Title, DefaultDir, DefaultFile) ->
   wx:set_env(Env),
   FileDialog = wxFileDialog:new(wx:null(),
@@ -1232,7 +1229,8 @@ append_textbox(TextCtrl, Str, Args)->
   ok.
 
 draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, DC) ->
-  {Xc, Yc} = Center = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},        % Centered around the middle of the radar bitmap
+  % Centered around the middle of the radar bitmap
+  {Xc, Yc} = Center = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},
   Rads = (RadarAngle - Angle) / 180 * math:pi(),
   {Brush, PixDist} = case SampleType of
     ultrasonic ->
@@ -1248,5 +1246,9 @@ draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, 
   wxDC:drawCircle(DC, Goal, 2*TimeDiff).
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
-  round(math:atan2(Y1-Y0, X1-X0) * 180 / math:pi()) + 180 - Angle.
+  case ((round(math:atan2(Y1 - Y0, X1 - X0) * 180 / math:pi())) + 180 - Angle) of
+    Diff when Diff >= 0 andalso Diff =< 180 -> Diff;
+    Diff when Diff >= 360 andalso Diff =< 540 -> Diff rem 180;
+    _ -> none
+  end.
 
