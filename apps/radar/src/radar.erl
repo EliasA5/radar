@@ -296,7 +296,7 @@ init([]) ->
   BackgroundOverlay = wxOverlay:new(),
   Background = {BackgroundOverlay, BackgroundBitmap, "backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING},
 
-  {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}, {ram_file, true}]),
+  {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
               background = Background, noti_box = NotificationsBox, status_bar = StatusBar,
               status_bar_stats = #stats{}, click_info = #click_info{selected = sets:new()}, radars = #{}},
@@ -896,11 +896,15 @@ terminate(_Reason, State) ->
   {ok, Dev} = file:open("radar_log.txt", [append]),
   file:write(Dev, Data),
   file:close(Dev),
-  dets:close(State#state.radar_backup),
-  maps:foreach(fun(_Key, #radar_info{bitmap = Bitmap, overlay = Overlay}) ->
+  maps:foreach(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, overlay = Overlay} = RadarInfo) ->
                    wxOverlay:destroy(Overlay),
-                   wxBitmap:destroy(Bitmap)
+                   wxBitmap:destroy(Bitmap),
+                    NewRadarInfo = RadarInfo#radar_info{bitmap = undefined,
+                                                        pid = undefined,
+                                                        overlay = undefined},
+                    dets:insert(State#state.radar_backup, {Name, NewRadarInfo})
                 end, State#state.radars),
+  dets:close(State#state.radar_backup),
   ok.
 
 %%--------------------------------------------------------------------
