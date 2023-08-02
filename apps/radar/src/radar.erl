@@ -326,6 +326,17 @@ handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
   Prev = State#state.click_info#click_info.key,
   case find_object(reclip(X, Y, wxPanel:getSize(State#state.canvas)), State#state.radars) of
     none ->
+      PickedRadars = case sets:is_empty(State#state.click_info#click_info.selected) of
+        true -> State#state.radars;
+        false -> maps:with(sets:to_list(State#state.click_info#click_info.selected), State#state.radars)
+      end,
+      maps:foreach(fun(Pid, #radar_info{node = Node} = RadarInfo) ->
+                       case find_angle(RadarInfo, {X, Y}) of
+                         Ang when Ang >= 0 andalso Ang =< 180 ->
+                           gen_server:abcast([Node], operator, {telemeter, Pid, Ang});
+                         _ -> ok
+                       end
+                   end, PickedRadars),
       {noreply, State};
     {Prev, _} ->
       spawn(fun() ->
@@ -612,11 +623,11 @@ handle_call({send_file, File, {_Path, _Name} = NewFLoc}, _From,
   {reply, ok, State#state{chosen_file = NewFLoc}};
 
 
-handle_call({send_telemeter, File}, _From,
+handle_call({send_telemeter, Angle}, _From,
               #state{click_info = #click_info{selected = Selected}} = State) ->
   case sets:is_empty(Selected) of
-    true -> operator:telemeter(all, File);
-    false -> operator:telemeter(sets:to_list(Selected), File)
+    true -> operator:telemeter(all, Angle);
+    false -> operator:telemeter(sets:to_list(Selected), Angle)
   end,
   {reply, ok, State};
 
@@ -1228,3 +1239,7 @@ draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, 
   wxDC:drawLine(DC, Center, Goal),
   TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
   wxDC:drawCircle(DC, {Xs, Ys}, 2*TimeDiff).
+
+find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
+  round(math:atan2(Y1-Y0, X1-X0) * 180 / math:pi()) + 180 - Angle.
+

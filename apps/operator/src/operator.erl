@@ -240,7 +240,7 @@ handle_cast({scan_both, Whom}, State) ->
   cast_msg(Whom, Msg, State#state.comm_map),
   {noreply, State};
 handle_cast({telemeter, Whom, Angle}, State) ->
-  Msg = {send, telemeter, Angle},
+  Msg = {send, telemeter, 180 - Angle},
   cast_msg(Whom, Msg, State#state.comm_map),
   {noreply, State};
 handle_cast({do_file, Whom, Which}, State) ->
@@ -456,6 +456,13 @@ cast_msg(Whom, Msg, CommMap) when is_map(Whom) ->
                    gen_statem:cast(Pid, Msg);
                   (_, _) -> ok
                end, Whom);
+
+cast_msg(Whom, Msg, CommMap) when is_pid(Whom) ->
+  case Whom of
+    Pid when is_map_key(Pid, CommMap) ->
+      gen_statem:cast(Pid, Msg);
+    _ -> ok
+  end;
 
 cast_msg(Whom, Msg, CommMap) ->
   Whom2 = sets:to_list(Whom),
