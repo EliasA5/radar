@@ -492,8 +492,7 @@ void TIMER1_A1_ISR (void)
 }
 
 void ADC10_handler(int a0, int a3);
-static int background_light_a3 = 0;
-static int background_light_a0 = 0;
+void calib_cm_array(int a0, int a3);
 static uchar calib = 0;
 
 void adc_set_calibrate()
@@ -515,8 +514,7 @@ void ADC10_ISR (void)
 	int a0 = adc10_samples[3] + adc10_samples[7] + adc10_samples[11] + adc10_samples[15];
 	ADC10SA  =    adc10_samples;
 	if(calib){
-		background_light_a0 = a0;
-		background_light_a3 = a3;
+		calib_cm_array(a0, a3);
 		calib = 0;
 	}
 	switch(state)
@@ -530,13 +528,13 @@ void ADC10_ISR (void)
 		case sonic_d:
 			break;
 		case ldr_d:
-			ADC10_handler(a0 - background_light_a0, a3 - background_light_a3);
+			ADC10_handler(a0, a3);
 			break;
 		case dual_d:
-			ADC10_handler(a0 - background_light_a0, a3 - background_light_a3);
+			ADC10_handler(a0, a3);
 			break;
 		case do_file:
-			ADC10_handler(a0 - background_light_a0, a3 - background_light_a3);
+			ADC10_handler(a0, a3);
 			break;
 		default: break;
 	}

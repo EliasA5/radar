@@ -284,27 +284,47 @@ int dual_d_handler()
 	return update_degree();
 }
 
-uchar cm_array[20];
-uchar find_distance(unsigned char sample)  // or cm_array global variable
+static char abs_min(char a, char b){
+	char res = a - b;
+	return res < 0 ? -res : res;
+}
+
+// regular lit room
+static const uchar cm_array0[12] = {41, 44, 67, 91, 112, 133, 147, 157, 167, 172, 177, 203};
+// dark room with bit of natural light
+static const uchar cm_array1[12] = {40, 45, 71, 99, 125, 147, 170, 190, 208, 225, 236, 250};
+static const uchar *cm_array = cm_array0;
+void calib_cm_array(int a0, int a3)
 {
-   uchar distance_array[]  = {0,5,10,15,20,25,30,35,40,45,50};
-   unsigned char temp,index;
-   temp = sample - cm_array[0];
-   for(int i=1;i<20;i++)
-   {
-	if(sample - cm_array[i] < temp)
-	    index=i;
+	uchar sample = (a0 + a3) >> 5;
+	char temp1 = abs_min(sample, cm_array0[11]);
+	char temp2 = abs_min(sample, cm_array1[11]);
+	cm_array = temp1 < temp2 ? cm_array0 : cm_array1;
+}
+
+uchar find_distance(char sample)  // or cm_array global variable
+{
+   uchar i, index = 0;
+   char temp = (char) 255;
+   char temp1;
+   for(i = 11; i; i--){
+	   if((temp1 = abs_min(sample, cm_array[i])) >= temp)
+		   continue;
+	   index = i;
+	   temp = temp1;
    }
-   return distance_array[index];
+   return (index << 2) + index;
 }
 
 void ADC10_handler(int a0, int a3)
 {
-	unsigned char sample = (a0 + a3) >> 5;
-	sample = find_distance(sample);
-	unsigned char msg[2];
+	char sample = (a0 + a3) >> 5;
+	uchar dist = find_distance(sample);
+	if(dist > 50)
+		return;
+	uchar msg[2];
 	msg[0] = MAKELDR(get_radar_deg());
-	msg[1] = sample;
+	msg[1] = dist;
 	add_msg_tx_queue(msg, 2);
 }
 
