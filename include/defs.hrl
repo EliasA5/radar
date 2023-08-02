@@ -2,6 +2,8 @@
 -ifndef(DEFS_HRL).
 -define(DEFS_HRL, true).
 
+-define(DIST_SCALE, 2).
+
 %% top 2 bytes of a message from communication to msp430
 -define(MSPPC_ULTRASONIC,1).
 -define(MSPPC_LDR,2).

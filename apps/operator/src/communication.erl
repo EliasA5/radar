@@ -196,7 +196,7 @@ rec(info, {data, Byte}, #data{rec_type = ldr, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,
   case format_ldr(RecBuf) of
-    {_Angle, Dist} = Sample when Dist > 25 andalso Dist < 205 ->
+    {_Angle, Dist} = Sample when Dist >= 0 andalso Dist =< 50 ->
       %% io:format("ldr dist: ~p~n", [Dist]),
       gen_server:cast(Data#data.operator_port, {ldr, self(), Sample});
     _ -> ok

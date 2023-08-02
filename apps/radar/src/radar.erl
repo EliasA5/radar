@@ -12,6 +12,8 @@
 
 -include_lib("wx/include/wx.hrl").
 
+-include("include/defs.hrl").
+
 %% API
 -export([start_link/0]).
 
@@ -1228,17 +1230,18 @@ append_textbox(TextCtrl, Str, Args)->
 draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, DC) ->
   {Xc, Yc} = Center = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},        % Centered around the middle of the radar bitmap
   Rads = (RadarAngle - Angle) / 180 * math:pi(),
-  {Xs, Ys} = Goal = {round(Xc + Dist*math:cos(Rads)), round(Yc + Dist*math:sin(Rads))},
-  Brush = case SampleType of
+  {Brush, PixDist} = case SampleType of
     ultrasonic ->
-      wxBrush:new(?wxRED);
+      {wxBrush:new(?wxRED), Dist * ?DIST_SCALE};
     ldr ->
-      wxBrush:new(?wxBLUE)
+      {wxBrush:new(?wxBLUE), Dist * ?DIST_SCALE}
     end,
+  {Xs, Ys} = Goal = {round(Xc + PixDist*math:cos(Rads)), round(Yc + PixDist*math:sin(Rads))},
   wxDC:setBrush(DC, Brush),
   wxDC:drawLine(DC, Center, Goal),
+  wxDC:drawText(DC, io_lib:format("~B", [Dist]), {Xs+4, Ys+4}),
   TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
-  wxDC:drawCircle(DC, {Xs, Ys}, 2*TimeDiff).
+  wxDC:drawCircle(DC, Goal, 2*TimeDiff).
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
   round(math:atan2(Y1-Y0, X1-X0) * 180 / math:pi()) + 180 - Angle.
