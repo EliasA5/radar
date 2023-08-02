@@ -60,6 +60,7 @@ unsigned char update_degree(void)
 extern int adc10_samples[16];
 void activate_ldr(void)
 {
+	adc_set_calibrate();
 	ADC10DTC1 = 16; // number of transfers
 	ADC10SA  =    adc10_samples;
 	ADCLDRCtl0 |= (ENC + ADC10ON + ADC10IE);
@@ -317,7 +318,6 @@ wakeup:
 	if(wakeup == 0)
 		return;
 
-	adc_set_calibrate();
 	disable_interrupts();
 	switch(lpm_mode)
 	{
