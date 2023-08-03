@@ -550,7 +550,7 @@ handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State)
       Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
-  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, redraw_stat_bar, redraw]}};
+  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, inc_msg, redraw_stat_bar, redraw]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
@@ -563,10 +563,10 @@ handle_call({disconnect_radar, _Node, Info}, _From,
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
                               click_info = ClickInfo#click_info{selected = NewSelected}
-                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, redraw_stat_bar, redraw]}}
+                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, inc_msg, redraw_stat_bar, redraw]}}
   catch
     _Err:{badkey, _} ->
-      {reply, ok, State}
+      {reply, ok, State, {continue, inc_msg}}
   end;
 
 handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = State) ->
@@ -587,7 +587,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                             end, ClickInfo#click_info.selected),
   {reply, ok, State#state{radars = NewRadars,
                           click_info = ClickInfo#click_info{selected = NewSelected}
-                         }, {continue, [{log, "Operator ~p reconnected~n", [Node]}, set_radar_nums, redraw_stat_bar, redraw]}};
+                         }, {continue, [{log, "Operator ~p reconnected~n", [Node]}, set_radar_nums, inc_msg, redraw_stat_bar, redraw]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
@@ -601,10 +601,10 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                            Info#radar_info{bitmap = Bmp, angle = Angle}
                        end, State#state.radars) of
     NewRadars ->
-      {reply, ok, State#state{radars = NewRadars}, {continue, redraw}}
+      {reply, ok, State#state{radars = NewRadars}, {continue, [redraw, inc_msg]}}
   catch
     _Err:{badkey, _} ->
-      {reply, ok, State}
+      {reply, ok, State, {continue, inc_msg}}
   end;
 
 handle_call({send_file, File, {_Path, _Name} = NewFLoc}, _From,
@@ -613,7 +613,7 @@ handle_call({send_file, File, {_Path, _Name} = NewFLoc}, _From,
     true -> operator:send_file(all, File);
     false -> operator:send_file(sets:to_list(Selected), File)
   end,
-  {reply, ok, State#state{chosen_file = NewFLoc}};
+  {reply, ok, State#state{chosen_file = NewFLoc}, {continue, inc_msg}};
 
 
 handle_call({send_telemeter, Angle}, _From,
@@ -622,7 +622,7 @@ handle_call({send_telemeter, Angle}, _From,
     true -> operator:telemeter(all, Angle);
     false -> operator:telemeter(sets:to_list(Selected), Angle)
   end,
-  {reply, ok, State};
+  {reply, ok, State, {continue, inc_msg}};
 
 handle_call({new_background, NewPath}, _From,
               #state{background = {BackgroundBitmap, _BackgroundPath}} = State) ->
@@ -633,7 +633,7 @@ handle_call({new_background, NewPath}, _From,
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
   Reply = ok,
-  {reply, Reply, State}.
+  {reply, Reply, State, {continue, inc_msg}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -656,7 +656,7 @@ handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) and
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, [redraw, set_detections, redraw_detections_bar]}}
+      {noreply, State#state{radars = NewRadars}, {continue, [inc_msg, redraw, set_detections, redraw_detections_bar]}}
   catch
     _Err:{badkey, _} -> {noreply, State}
   end;
@@ -704,7 +704,7 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
                             end, ClickInfo#click_info.selected),
   {noreply, State#state{radars = NewRadars,
                         click_info = ClickInfo#click_info{selected = NewSelected}},
-            {continue, [set_radar_nums, dec_nodes, redraw_stat_bar, redraw,
+            {continue, [inc_msg, set_radar_nums, dec_nodes, redraw_stat_bar, redraw,
                          {log,  "node ~p disconnected~n", [Node]}]}};
 
 handle_info({nodeup, Node}, State) ->
@@ -712,7 +712,7 @@ handle_info({nodeup, Node}, State) ->
 
 handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
-  {noreply, State}.
+  {noreply, State, {continue, inc_msg}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -761,6 +761,10 @@ do_cont(redraw, #state{background = {BackgroundBitmap, _},
 do_cont(clear_samples, #state{radars = Radars} = State) ->
   NewRadars = maps:map(fun(_Pid, RadarInfo) -> RadarInfo#radar_info{samples = []} end, Radars),
   State#state{radars = NewRadars};
+
+do_cont(inc_msg, State) ->
+  ets:update_counter(State#state.status_bar_stats, rec_msg, 1),
+  State;
 
 do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
   case wxTextCtrl:getNumberOfLines(TextCtrl) of
@@ -1167,4 +1171,3 @@ append_textbox(TextCtrl, Str, Args)->
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
   ((round(math:atan2(Y1 - Y0, X1 - X0) * 180 / math:pi())) + 180 - Angle) rem 360.
-
