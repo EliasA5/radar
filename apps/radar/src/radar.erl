@@ -60,7 +60,6 @@
 -record(radar_info, {
           pos,
           angle = 0,
-          overlay,
           bitmap,
           node,
           pid,
@@ -293,8 +292,7 @@ init([]) ->
   wxFrame:show(Frame),
   {W, H} = wxPanel:getSize(Canvas),
   BackgroundBitmap = get_image_bitmap("backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING, 0, W, H),
-  BackgroundOverlay = wxOverlay:new(),
-  Background = {BackgroundOverlay, BackgroundBitmap, "backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING},
+  Background = {BackgroundBitmap, "backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING},
 
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
@@ -320,9 +318,8 @@ handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
              #state{radars = Radars} = State) ->
   Bmp = get_image_bitmap(?RADAR_DRAWING),
   Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
-  Overlay = wxOverlay:new(),
-  NewRadars = Radars#{X => #radar_info{overlay = Overlay, pos = Pos, bitmap = Bmp}},
-  {noreply, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, {redraw_radar, X}]}};
+  NewRadars = Radars#{X => #radar_info{pos = Pos, bitmap = Bmp}},
+  {noreply, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, redraw]}};
 
 handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
   Prev = State#state.click_info#click_info.key,
@@ -384,7 +381,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
                             Radars, Selected),
       {noreply, State#state{radars = NewRadars,
                             click_info = #click_info{selected = sets:new()}
-                           }, {continue, redraw_radars}};
+                           }, {continue, redraw}};
     {Key, _Object} ->
       NewRadars = Update_Radar_Bitmaps(Key, Radars, ?RADAR_DRAWING_SELECTED),
       wxPanel:connect(State#state.canvas, motion),
@@ -393,7 +390,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
       NewOffset = {X - X0 - ?BITMAP_WIDTH, Y - Y0 - ?BITMAP_HEIGHT},
       {noreply, State#state{radars = NewRadars,
                             click_info = #click_info{key = Key, offset = NewOffset, selected = sets:add_element(Key, Selected)}
-                           }, {continue, [redraw_radars]}}
+                           }, {continue, redraw}}
   end;
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
@@ -401,7 +398,7 @@ handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
   NewPos = reclip(X1-Dx, Y1-Dy, wxPanel:getSize(State#state.canvas)),
   try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, State#state.radars) of
     NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, [redraw_radars]}}
+      {noreply, State#state{radars = NewRadars}, {continue, [clear_samples, redraw]}}
   catch
     _Err:{badkey, _} ->
       {noreply, State}
@@ -414,10 +411,10 @@ handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo}
 
 %% Window Events
 handle_event(#wx{event = #wxSize{}}, State) ->
-  {noreply, State, {continue, [redraw_radars]}};
+  {noreply, State, {continue, [clear_samples, redraw]}};
 
 handle_event(#wx{event = #wxIconize{}}, State) ->
-  {noreply, State, {continue, [redraw_radars]}};
+  {noreply, State, {continue, [clear_samples, redraw]}};
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
@@ -513,11 +510,13 @@ handle_event(#wx{id=?BACKGROUND_BUTTON, event=#wxCommand{type=command_button_cli
   Env = wx:get_env(),
   {ok, CurrentDir} = file:get_cwd(),
 
-  spawn(fun() -> file_dialog(Env,
-                       fun(Path) -> gen_server:call({global, ?SERVER}, {new_background, Path}) end,
-                       "Pick a Background", CurrentDir ++ "/backgrounds/", ?DEFAULT_BACKGROUND_DRAWING)
-
-end),
+  spawn(fun() ->
+            file_dialog(Env,
+                        fun(Path) -> gen_server:call({global, ?SERVER}, {new_background, Path}) end,
+                        "Pick a Background",
+                        CurrentDir ++ "/backgrounds/",
+                        ?DEFAULT_BACKGROUND_DRAWING)
+        end),
 {noreply, State};
 
 
@@ -543,48 +542,43 @@ handle_event(#wx{} = Cmd, State) ->
 
 handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State) ->
   #{pid := Pid, name:= Name} = Info,
-  Overlay = wxOverlay:new(),
   NewRadars = case dets:lookup(State#state.radar_backup, Name) of
     [] ->
       Bmp = get_image_bitmap(?RADAR_DRAWING),
       {W, H} = wxPanel:getSize(State#state.canvas),
       Pos = reclip(W div 2, H div 2, wxPanel:getSize(State#state.canvas)),
-      Radars#{Pid => #radar_info{overlay = Overlay, name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
+      Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
     [{_, #radar_info{pos = {X, Y}, angle = Angle}}] ->
       Bmp = get_image_bitmap(?RADAR_DRAWING, Angle),
       Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
-      Radars#{Pid => #radar_info{overlay = Overlay, name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
+      Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
-  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, redraw_stat_bar, {redraw_radar, Pid}]}};
+  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, redraw_stat_bar, redraw]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
   #{pid := Pid} = Info,
   try maps:take(Pid, State#state.radars) of
-    {#radar_info{name = Name, bitmap = Bitmap, overlay = Overlay} = RadarInfo, NewRadars} ->
-      NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined, overlay = undefined},
+    {#radar_info{name = Name, bitmap = Bitmap} = RadarInfo, NewRadars} ->
+      NewRadarInfo = RadarInfo#radar_info{bitmap = undefined, pid = undefined},
       dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
       wxBitmap:destroy(Bitmap),
-      wxOverlay:destroy(Overlay),
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
                               click_info = ClickInfo#click_info{selected = NewSelected}
-                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, redraw_stat_bar, redraw_radars]}}
+                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, redraw_stat_bar, redraw]}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
   end;
 
 handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap,
-                                      overlay = Overlay, node = INode} = RadarInfo) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
                               case INode of
                                 Node ->
                                   wxBitmap:destroy(Bitmap),
-                                  wxOverlay:destroy(Overlay),
                                   NewRadarInfo = RadarInfo#radar_info{bitmap = undefined,
-                                                                      pid = undefined,
-                                                                      overlay = undefined},
+                                                                      pid = undefined},
                                   dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
                                   false;
                                 _ -> true
@@ -596,7 +590,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                             end, ClickInfo#click_info.selected),
   {reply, ok, State#state{radars = NewRadars,
                           click_info = ClickInfo#click_info{selected = NewSelected}
-                         }, {continue, [{log, "Operator ~p recconected~n", [Node]}, set_radar_nums, redraw_stat_bar, redraw_radars]}};
+                         }, {continue, [{log, "Operator ~p reconnected~n", [Node]}, set_radar_nums, redraw_stat_bar, redraw]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
@@ -610,7 +604,7 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                            Info#radar_info{bitmap = Bmp, angle = Angle}
                        end, State#state.radars) of
     NewRadars ->
-      {reply, ok, State#state{radars = NewRadars}, {continue, redraw_radars}}
+      {reply, ok, State#state{radars = NewRadars}, {continue, redraw}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State}
@@ -634,10 +628,9 @@ handle_call({send_telemeter, Angle}, _From,
   {reply, ok, State};
 
 handle_call({new_background, NewPath}, _From,
-              #state{background = {BackgroundOverlay, BackgroundBitmap,
-                                                   _BackgroundPath}} = State) ->
-  {reply, ok, State#state{background = {BackgroundOverlay, BackgroundBitmap, NewPath}},
-  {continue, [load_background, redraw_background, redraw_radars]}};
+              #state{background = {BackgroundBitmap, _BackgroundPath}} = State) ->
+  {reply, ok, State#state{background = {BackgroundBitmap, NewPath}},
+  {continue, [load_background, redraw]}};
 
 
 handle_call(_Request, _From, State) ->
@@ -666,7 +659,7 @@ handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) and
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, [{draw_samples, Pid}, set_detections, redraw_detections_bar]}}
+      {noreply, State#state{radars = NewRadars}, {continue, [redraw, set_detections, redraw_detections_bar]}}
   catch
     _Err:{badkey, _} -> {noreply, State}
   end;
@@ -691,26 +684,18 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
   UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
   UpdatedState = State#state{status_bar_stats = Stats#stats{uptime = Uptime + 1}},
-  case Uptime rem 3 of
-    0 ->
-      {noreply, UpdatedState, {continue, [draw_samples, set_detections, redraw_detections_bar]}};
-    _ ->
-      {noreply, UpdatedState}
-  end;
+  {noreply, UpdatedState, {continue, [redraw, set_detections, redraw_detections_bar]}};
 
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
 handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
-  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap,
-                                      overlay = Overlay, node = INode} = RadarInfo) ->
+  NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
                               case INode of
                                 Node ->
                                   wxBitmap:destroy(Bitmap),
-                                  wxOverlay:destroy(Overlay),
                                   NewRadarInfo = RadarInfo#radar_info{bitmap = undefined,
-                                                                      pid = undefined,
-                                                                      overlay = undefined},
+                                                                      pid = undefined},
                                   dets:insert(State#state.radar_backup, {Name, NewRadarInfo}),
                                  false;
                                 _ -> true
@@ -722,7 +707,7 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
                             end, ClickInfo#click_info.selected),
   {noreply, State#state{radars = NewRadars,
                         click_info = ClickInfo#click_info{selected = NewSelected}},
-            {continue, [set_radar_nums, dec_nodes, redraw_stat_bar, redraw_radars,
+            {continue, [set_radar_nums, dec_nodes, redraw_stat_bar, redraw,
                          {log,  "node ~p disconnected~n", [Node]}]}};
 
 handle_info({nodeup, Node}, State) ->
@@ -753,32 +738,32 @@ handle_continue(Continue, State) when is_list(Continue) ->
 handle_continue(Continue, State) ->
   {noreply, do_cont(Continue, State)}.
 
-do_cont(redraw_radars, State) ->
-  redraw_radars(State),
-  State;
+%% [{ldr, Angle, Distance}]
+%% [{ultrasonic, Angle, Distance}]
+do_cont(redraw, #state{background = {BackgroundBitmap, _},
+                             click_info = #click_info{selected = Selected}} = State) ->
+  {W, H} = wxPanel:getSize(State#state.canvas),
+  Bitmap = wxBitmap:new(W, H),
+  Fun = fun(DC) ->
+            wxDC:clear(DC),
+            wxDC:drawBitmap(DC, BackgroundBitmap, {0, 0}),
 
-do_cont({redraw_radar, Key}, State) ->
-  DC = wxWindowDC:new(State#state.canvas),
-  Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
-                    ?wxFONTWEIGHT_EXTRABOLD),
-  wxDC:setFont(DC, Font),
-  wxFont:destroy(Font),
-  #{Key := #radar_info{overlay = Overlay, bitmap = Bmp, pos = {X, Y} = Pos, angle = Angle, node = Node}} = State#state.radars,
-	DCO = wxDCOverlay:new(Overlay, DC),
-  wxDCOverlay:clear(DCO),
-  wxOverlay:reset(Overlay),
-	wxDCOverlay:clear(DCO),
-  case sets:is_element(Key, State#state.click_info#click_info.selected) of
-    true ->
-      PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
-      LastText = io_lib:format("~p", [Angle]),
-      FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
-      wxDC:drawLabel(DC, FinalText,
-      {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]);
-    false -> ok
-  end,
-  wxDC:drawBitmap(DC, Bmp, Pos),
-  State;
+            Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
+                              ?wxFONTWEIGHT_EXTRABOLD),
+            wxDC:setFont(DC, Font),
+            wxFont:destroy(Font),
+
+            TimeNow = erlang:monotonic_time(millisecond),
+            NewRadars = maps:map(fun(Key, RadarInfo) -> draw_radar(Key, RadarInfo, TimeNow, Selected, DC) end, State#state.radars),
+            NewRadars
+        end,
+  NewRadars = draw(State#state.canvas, Bitmap, Fun),
+  wxBitmap:destroy(Bitmap),
+  State#state{radars = NewRadars};
+
+do_cont(clear_samples, #state{radars = Radars} = State) ->
+  NewRadars = maps:map(fun(_Pid, RadarInfo) -> RadarInfo#radar_info{samples = []} end, Radars),
+  State#state{radars = NewRadars};
 
 do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
   case wxTextCtrl:getNumberOfLines(TextCtrl) of
@@ -792,18 +777,24 @@ do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
   append_textbox(TextCtrl, Str, Args),
   State;
 
-do_cont(load_background, #state{background = Background, canvas = Canvas} = State) ->
-  {BackgroundOverlay, BackgroundBitmap, BackgroundPath} = Background,
+do_cont(load_background, #state{background = {BackgroundBitmap, BackgroundPath},
+                                canvas = Canvas} = State) ->
   wxBitmap:destroy(BackgroundBitmap),
   {W, H} = wxPanel:getSize(Canvas),
   NewBackgroundBitmap = get_image_bitmap(BackgroundPath, 0, W, H),
-  NewBackground = {BackgroundOverlay, NewBackgroundBitmap, BackgroundPath},
+  NewBackground = {NewBackgroundBitmap, BackgroundPath},
   State#state{background = NewBackground};
 
-do_cont(redraw_background, #state{background = Background,canvas = Canvas} = State) ->
-  redraw_background(Canvas, Background),
+do_cont(redraw_background, #state{background = {BackgroundBitmap, _}} = State) ->
+  {W, H} = wxPanel:getSize(State#state.canvas),
+  Bitmap = wxBitmap:new(W, H),
+  Fun = fun(DC) ->
+            wxDC:clear(DC),
+            wxDC:drawBitmap(DC, BackgroundBitmap, {0, 0})
+        end,
+  draw(State#state.canvas, Bitmap, Fun),
+  wxBitmap:destroy(Bitmap),
   State;
-
 
 do_cont(redraw_stat_bar, #state{status_bar_stats = #stats{num_radars = NumRadars,
                                                           num_nodes = NumNodes} = _Stats
@@ -835,48 +826,8 @@ do_cont(set_radar_nums, #state{status_bar_stats = Stats} = State) ->
 
 do_cont(set_detections, #state{status_bar_stats = Stats} = State) ->
   DetectionNum = maps:fold(fun(_Key, #radar_info{samples = Samples}, Acc) -> Acc + length(Samples) end, 0, State#state.radars),
-  State#state{status_bar_stats = Stats#stats{active_detections = DetectionNum}};
+  State#state{status_bar_stats = Stats#stats{active_detections = DetectionNum}}.
 
-do_cont(draw_samples, State) ->
-  DC = wxWindowDC:new(State#state.canvas),
-  TimeNow = erlang:monotonic_time(millisecond),
-  NewRadars = maps:map(fun(_Key, #radar_info{overlay = Overlay, pos = Pos, samples = Samples, angle = RadarAngle} = RadarInfo) ->
-                          DCO = wxDCOverlay:new(Overlay, DC),
-                          wxDCOverlay:clear(DCO),
-                          NewSamples = lists:filter(fun
-                                                      ({_, Time, _, _}) when TimeNow - Time > 3000 -> false;
-                                                      (Sample) ->
-                                                        draw_sample(Sample, Pos, TimeNow, RadarAngle, DC),
-                                                        true
-                                                    end, Samples),
-                          wxDCOverlay:destroy(DCO),
-                          RadarInfo#radar_info{samples = NewSamples}
-                      end, State#state.radars),
-	wxWindowDC:destroy(DC),
-  State#state{radars = NewRadars};
-
-%% [{ldr, Angle, Distance}]
-%% [{ultrasonic, Angle, Distance}]
-do_cont({draw_samples, Pid}, #state{canvas = Canvas} = State) ->
-  #{Pid := #radar_info{overlay = Overlay, pos = Pos, samples = Samples, angle = RadarAngle} = RadarInfo} = State#state.radars,
-  DC = wxWindowDC:new(Canvas),
-  DCO = wxDCOverlay:new(Overlay, DC),
-  wxDCOverlay:clear(DCO),
-  TimeNow = erlang:monotonic_time(millisecond),
-  NewSamples = lists:filter(fun
-                              ({_, Time, _, _}) when TimeNow - Time > 3000 -> false;
-                              (Sample) ->
-                                draw_sample(Sample, Pos, TimeNow, RadarAngle, DC),
-                                true
-                            end, Samples),
-  wxDCOverlay:destroy(DCO),
-	wxWindowDC:destroy(DC),
-  NewRadars = (State#state.radars)#{Pid := RadarInfo#radar_info{samples = NewSamples}},
-  State#state{radars = NewRadars};
-
-do_cont(remove_samples, #state{radars = Radars} = State) ->
-  NewRadars = maps:map(fun(_Pid, RadarInfo) -> RadarInfo#radar_info{samples = []} end, Radars),
-  State#state{radars = NewRadars}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -896,12 +847,10 @@ terminate(_Reason, State) ->
   {ok, Dev} = file:open("radar_log.txt", [append]),
   file:write(Dev, Data),
   file:close(Dev),
-  maps:foreach(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, overlay = Overlay} = RadarInfo) ->
-                   wxOverlay:destroy(Overlay),
+  maps:foreach(fun(_Key, #radar_info{name = Name, bitmap = Bitmap} = RadarInfo) ->
                    wxBitmap:destroy(Bitmap),
                     NewRadarInfo = RadarInfo#radar_info{bitmap = undefined,
-                                                        pid = undefined,
-                                                        overlay = undefined},
+                                                        pid = undefined},
                     dets:insert(State#state.radar_backup, {Name, NewRadarInfo})
                 end, State#state.radars),
   dets:close(State#state.radar_backup),
@@ -1102,71 +1051,56 @@ is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
       false
   end.
 
-
-draw_radar_on_dc(_Key, #radar_info{pos = Pos, overlay = Overlay, bitmap = Bmp}, false, DC) ->
-  DCO = wxDCOverlay:new(Overlay, DC),
-  wxDCOverlay:clear(DCO),
-  wxOverlay:reset(Overlay),
+draw_radar_on_dc(_Key, #radar_info{pos = Pos, bitmap = Bmp}, false, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
-  wxDCOverlay:destroy(DCO),
   ok;
 
-draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, overlay = Overlay, bitmap = Bmp, node = Node}, true, DC) ->
-  DCO = wxDCOverlay:new(Overlay, DC),
-  wxDCOverlay:clear(DCO),
+draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, bitmap = Bmp, node = Node}, true, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
   PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
   LastText = io_lib:format("~p", [Angle]),
   FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
   wxDC:drawLabel(DC, FinalText,
         {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]),
-  wxOverlay:reset(Overlay),
-  wxDCOverlay:destroy(DCO),
   ok.
 
-redraw_radars(#state{canvas = Canvas, background = {
-  BackgroundOverlay, BackgroundBitmap, _BackgroundPath},
-  click_info = #click_info{selected = Selected}, radars = Radars} = _State) ->
-  {W, H} = wxPanel:getSize(Canvas),
-  Bitmap = wxBitmap:new(W, H),
-  Fun = fun(DC) ->
-            DCO = wxDCOverlay:new(BackgroundOverlay, DC),
-            wxDCOverlay:clear(DCO),
-            wxDC:drawBitmap(DC, BackgroundBitmap, {0, 0}),
+draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, DC) ->
+  % Centered around the middle of the radar bitmap
+  {Xc, Yc} = Center = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},
+  Rads = (RadarAngle - Angle) / 180 * math:pi(),
+  {Brush, PixDist} = case SampleType of
+    ultrasonic ->
+      {wxBrush:new(?wxRED), Dist * ?DIST_SCALE};
+    ldr ->
+      {wxBrush:new(?wxBLUE), Dist * ?DIST_SCALE}
+    end,
+  {Xs, Ys} = Goal = {round(Xc + PixDist*math:cos(Rads)), round(Yc + PixDist*math:sin(Rads))},
+  wxDC:setBrush(DC, Brush),
+  wxDC:drawLine(DC, Center, Goal),
+  wxDC:drawText(DC, io_lib:format("~B", [Dist]), {Xs+4, Ys+4}),
+  TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
+  wxDC:drawCircle(DC, Goal, 2*TimeDiff).
 
-            Font = wxFont:new(8, ?wxFONTFAMILY_MODERN, ?wxFONTSTYLE_NORMAL,
-                              ?wxFONTWEIGHT_EXTRABOLD),
-            wxDC:setFont(DC, Font),
-            wxFont:destroy(Font),
-            maps:foreach(fun(Key, RadarInfo) ->
-                             wxOverlay:reset(RadarInfo#radar_info.overlay),
-                             draw_radar_on_dc(Key, RadarInfo, sets:is_element(Key, Selected), DC)
-                         end, Radars),
-            wxDCOverlay:destroy(DCO)
-        end,
-  draw(Canvas, Bitmap, Fun),
-  wxBitmap:destroy(Bitmap).
+draw_radar(_Key, #radar_info{pos = Pos, samples = Samples, angle = RadarAngle} = RadarInfo, TimeNow, Selected, DC) ->
+  draw_radar_on_dc(_Key, RadarInfo, sets:is_element(_Key, Selected), DC),
+  NewSamples = lists:filter(fun
+                              ({_, Time, _, _}) when TimeNow - Time > 3000 -> false;
+                              (Sample) -> draw_sample(Sample, Pos, TimeNow, RadarAngle, DC), true
+                            end, Samples),
+  RadarInfo#radar_info{samples = NewSamples}.
 
 draw(Canvas, Bitmap, Fun) ->
   MemoryDC = wxMemoryDC:new(Bitmap),
   CDC = wxPaintDC:new(Canvas),
 
-  Fun(MemoryDC),
+  Ret = Fun(MemoryDC),
   wxDC:blit(CDC, {0,0},
             {wxBitmap:getWidth(Bitmap), wxBitmap:getHeight(Bitmap)},
             MemoryDC, {0,0}),
 
   wxPaintDC:destroy(CDC),
-  wxMemoryDC:destroy(MemoryDC).
-
-redraw_background(Canvas, {BackgroundOverlay, BackgroundBitmap, _BackgroundPath} = _Background) ->
-  BackgroundDC = wxWindowDC:new(Canvas),
-  wxOverlay:reset(BackgroundOverlay),
-  BackgroundDCO = wxDCOverlay:new(BackgroundOverlay, BackgroundDC),
-  wxDC:drawBitmap(BackgroundDC, BackgroundBitmap, {0, 0}),
-  %% timer:sleep(2000), % Just temporary to debug background effects
-  wxDCOverlay:destroy(BackgroundDCO),
-  wxWindowDC:destroy(BackgroundDC).
+  wxMemoryDC:destroy(MemoryDC),
+  Ret.
 
 get_image_bitmap(Path) ->
   get_image_bitmap(Path, 0).
@@ -1227,23 +1161,6 @@ append_textbox(TextCtrl, Str, Args)->
   TimeStr = get_current_time_str(hms),
   wxTextCtrl:appendText(TextCtrl, io_lib:format("~s: " ++ Str, [TimeStr | Args])),
   ok.
-
-draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, DC) ->
-  % Centered around the middle of the radar bitmap
-  {Xc, Yc} = Center = {X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT},
-  Rads = (RadarAngle - Angle) / 180 * math:pi(),
-  {Brush, PixDist} = case SampleType of
-    ultrasonic ->
-      {wxBrush:new(?wxRED), Dist * ?DIST_SCALE};
-    ldr ->
-      {wxBrush:new(?wxBLUE), Dist * ?DIST_SCALE}
-    end,
-  {Xs, Ys} = Goal = {round(Xc + PixDist*math:cos(Rads)), round(Yc + PixDist*math:sin(Rads))},
-  wxDC:setBrush(DC, Brush),
-  wxDC:drawLine(DC, Center, Goal),
-  wxDC:drawText(DC, io_lib:format("~B", [Dist]), {Xs+4, Ys+4}),
-  TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
-  wxDC:drawCircle(DC, Goal, 2*TimeDiff).
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
   case ((round(math:atan2(Y1 - Y0, X1 - X0) * 180 / math:pi())) + 180 - Angle) of
