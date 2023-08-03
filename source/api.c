@@ -293,13 +293,25 @@ static char abs_min(char a, char b){
 static const uchar cm_array0[12] = {41, 44, 67, 91, 112, 133, 147, 157, 167, 172, 177, 203};
 // dark room with bit of natural light
 static const uchar cm_array1[12] = {40, 45, 71, 99, 125, 147, 170, 190, 208, 225, 236, 250};
+// really lit room
+static const uchar cm_array2[12] = {40, 45, 71, 99, 125, 147, 170, 190, 208, 225, 236, 0};
 static const uchar *cm_array = cm_array0;
 void calib_cm_array(int a0, int a3)
 {
 	uchar sample = (a0 + a3) >> 5;
-	char temp1 = abs_min(sample, cm_array0[11]);
-	char temp2 = abs_min(sample, cm_array1[11]);
-	cm_array = temp1 < temp2 ? cm_array0 : cm_array1;
+	char smallest = abs_min(sample, cm_array0[11]);
+	cm_array = cm_array0;
+
+	char temp1 = abs_min(sample, cm_array1[11]);
+	char temp2 = abs_min(sample, cm_array2[11]);
+	if(temp1 < smallest){
+		smallest = temp1;
+		cm_array = cm_array1;
+	}
+	if(temp2 < smallest){
+		smallest = temp2;
+		cm_array = cm_array2;
+	}
 }
 
 uchar find_distance(char sample)  // or cm_array global variable
