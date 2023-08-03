@@ -312,6 +312,9 @@ handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldR
 handle_info({nodedown, RadarNode}, #state{radar_node = RadarNode} = State) ->
   {noreply, State#state{radar_node = nonode@nohost, last_radar_node = RadarNode}};
 
+handle_info({nodeup, RadarNode}, #state{last_radar_node = RadarNode} = State) ->
+  {noreply, State#state{radar_node = RadarNode}, {continue, reconnect}};
+
 handle_info(_Info, State) ->
   io:format("~w~n", [_Info]),
   {noreply, State}.
