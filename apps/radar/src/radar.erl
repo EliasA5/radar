@@ -807,12 +807,9 @@ do_cont(redraw_detections_bar, State) ->
   wxStatusBar:setStatusText(State#state.detections_bar, DetectionsText),
   State;
 
-
 do_cont(inc_nodes, State) ->
-  [{_, Stats}] = ets:lookup(State,num_nods),
-  ets:update_counter(Stats, num_nodes, 1),
+  ets:update_counter(State#state.status_bar_stats, num_nodes, 1),
   State;
-
 
 do_cont(dec_nodes, State) ->
   ets:update_counter(State#state.status_bar_stats, num_nodes, -1),
