@@ -1163,9 +1163,5 @@ append_textbox(TextCtrl, Str, Args)->
   ok.
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
-  case ((round(math:atan2(Y1 - Y0, X1 - X0) * 180 / math:pi())) + 180 - Angle) of
-    Diff when Diff >= 0 andalso Diff =< 180 -> Diff;
-    Diff when Diff >= 360 andalso Diff =< 540 -> Diff rem 180;
-    _ -> none
-  end.
+  ((round(math:atan2(Y1 - Y0, X1 - X0) * 180 / math:pi())) + 180 - Angle) rem 360.
 
