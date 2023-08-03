@@ -40,7 +40,8 @@
           single_sample = false,
           radar_backup,
           noti_box,
-          chosen_file = {"~", ""}
+          chosen_file = {"~", ""},
+          us_max_min = {2, 450}
 }).
 
 -record(click_info, {
@@ -70,7 +71,7 @@
 -define(STELEM_BUTTON, 108).
 -define(BACKGROUND_BUTTON, 109).
 -define(IDLE_BUTTON, 110).
--define(EMPTY_BUTTON, 111).
+-define(US_DISTANCE, 111).
 
 -define(RADAR_DRAWING, "imgs/radar-normal.png").
 -define(RADAR_DRAWING_SELECTED, "imgs/radar-selected.png").
@@ -225,8 +226,8 @@ init([]) ->
   wxGridSizer:add(ButtonGridSizer, File3Button,
                   [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
-  EmptyButton = wxButton:new(Frame, ?EMPTY_BUTTON, [{label, "Empty"}]),
-  wxGridSizer:add(ButtonGridSizer, EmptyButton,
+  PickMinMaxButton = wxButton:new(Frame, ?US_DISTANCE, [{label, "US Dist"}]),
+  wxGridSizer:add(ButtonGridSizer, PickMinMaxButton,
                   [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
   ShowStatsButton = wxButton:new(Frame, ?STATS_BUTTON, [{label, "Show Stats"}]),
@@ -501,6 +502,23 @@ handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked
         end),
   {noreply, State};
 
+handle_event(#wx{id=?US_DISTANCE, event=#wxCommand{type=command_button_clicked}},
+             #state{frame = _Frame, us_max_min = {Min, Max}} = State) ->
+  Env = wx:get_env(),
+  spawn(fun() ->
+            slider_dialog(Env, {2, 450, Min},
+                          fun(MinVal) ->
+                              slider_dialog(Env, {2, 450, Max},
+                                            fun(MaxVal) ->
+                                                case MinVal > MaxVal of
+                                                  true -> error_dialog(Env, "Error", "Minimum value is bigger than maximum");
+                                                  false -> gen_server:call({global, ?SERVER}, {change_us_angles, MinVal, MaxVal})
+                                                end
+                                            end,
+                                            "Pick max distance")
+                          end, "Pick min distance")
+        end),
+  {noreply, State};
 
 handle_event(#wx{id=?BACKGROUND_BUTTON, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame} = State) ->
@@ -607,6 +625,9 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
       {reply, ok, State, {continue, inc_msg}}
   end;
 
+handle_call({change_us_angles, MinVal, MaxVal}, _From, State) ->
+  {reply, ok, State#state{us_max_min = {MinVal, MaxVal}}};
+
 handle_call({send_file, File, {_Path, _Name} = NewFLoc}, _From,
               #state{click_info = #click_info{selected = Selected}} = State) ->
   case sets:is_empty(Selected) of
@@ -647,11 +668,14 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_cast({Pid, Samples}, State) when (is_pid(Pid) orelse is_integer(Pid)) andalso is_list(Samples) ->
+handle_cast({Pid, Samples}, #state{us_max_min = {Min, Max}} = State) when (is_pid(Pid) orelse is_integer(Pid)) andalso is_list(Samples) ->
   try maps:update_with(Pid, fun(#radar_info{samples = OldSamples} = RadarInfo) ->
-                            SamplesTime = lists:map(fun({Type, Angle, Dist}) ->
-                                                        {Type, erlang:monotonic_time(millisecond), Angle, Dist}
-                                                    end, Samples),
+                            SamplesTime = lists:filtermap(
+                                            fun
+                                              ({ultrasonic, _Angle, Dist}) when Dist < Min orelse Dist > Max -> false;
+                                              ({Type, Angle, Dist}) ->
+                                                {true, {Type, erlang:monotonic_time(millisecond), Angle, Dist}}
+                                            end, Samples),
                             NewSamples = SamplesTime ++ OldSamples,
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
