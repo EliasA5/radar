@@ -28,14 +28,6 @@
 
 -define(SERVER, ?MODULE).
 
--record(stats, {
-          uptime = 0,
-          rec_msg = 0,
-          num_nodes = 0,
-          num_radars = 0,
-          active_detections = 0
-}).
-
 -record(state, {
           frame,
           canvas,
@@ -296,10 +288,15 @@ init([]) ->
   BackgroundOverlay = wxOverlay:new(),
   Background = {BackgroundOverlay, BackgroundBitmap, "backgrounds/" ++ ?DEFAULT_BACKGROUND_DRAWING},
 
+  StatsETS = ets:new(stats_ets, [set]),
+  StatsKeys = [uptime, rec_msg, num_nodes, num_radars, active_detections],
+  StatsList = [{Key, 0} || Key <- StatsKeys],
+  ets:insert(StatsETS, StatsList),
+
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}]),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
               background = Background, noti_box = NotificationsBox, status_bar = StatusBar,
-              status_bar_stats = #stats{}, click_info = #click_info{selected = sets:new()}, radars = #{}},
+              status_bar_stats = StatsETS, click_info = #click_info{selected = sets:new()}, radars = #{}},
        {continue, [redraw_stat_bar, redraw_detections_bar, load_background, redraw_background,
        {log, "~s, radar app starting~n", [get_current_time_str(calendar)]}]}
   }.
@@ -686,16 +683,16 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
-handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = #stats{uptime = Uptime} = Stats} = State) ->
+handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = Stats} = State) ->
+  Uptime = ets:update_counter(Stats, uptime, 1),
   {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
   UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
-  UpdatedState = State#state{status_bar_stats = Stats#stats{uptime = Uptime + 1}},
   case Uptime rem 3 of
     0 ->
-      {noreply, UpdatedState, {continue, [draw_samples, set_detections, redraw_detections_bar]}};
+      {noreply, State, {continue, [draw_samples, set_detections, redraw_detections_bar]}};
     _ ->
-      {noreply, UpdatedState}
+      {noreply, State}
   end;
 
 handle_info(#wx{} = WxEvent, State) ->
@@ -805,37 +802,46 @@ do_cont(redraw_background, #state{background = Background,canvas = Canvas} = Sta
   State;
 
 
-do_cont(redraw_stat_bar, #state{status_bar_stats = #stats{num_radars = NumRadars,
-                                                          num_nodes = NumNodes} = _Stats
-                               } = State) ->
+do_cont(redraw_stat_bar, State) ->
+  [{_, NumNodes}] = ets:lookup(State#state.status_bar_stats, num_nodes),
+  [{_, NumRadars}] = ets:lookup(State#state.status_bar_stats, num_radars),
   StatusText = io_lib:format("Nodes/Radars connected: ~B/~B", [NumNodes, NumRadars]),
   wxStatusBar:setStatusText(State#state.status_bar, StatusText, [{number, 1}]),
   State;
 
-do_cont(redraw_detections_bar, #state{status_bar_stats = #stats{active_detections = ActiveDetections} = _Stats
-                               } = State) ->
+do_cont(redraw_detections_bar, State) ->
+  [{_, ActiveDetections}] = ets:lookup(State#state.status_bar_stats, active_detections),
   DetectionsText = io_lib:format("Active Detections: ~B", [ActiveDetections]),
   wxStatusBar:setStatusText(State#state.detections_bar, DetectionsText),
   State;
 
-do_cont(inc_nodes, #state{status_bar_stats = #stats{num_nodes = NumNodes} = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{num_nodes = NumNodes + 1}};
 
-do_cont(dec_nodes, #state{status_bar_stats = #stats{num_nodes = NumNodes} = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{num_nodes = NumNodes - 1}};
+do_cont(inc_nodes, State) ->
+  [{_, Stats}] = ets:lookup(State,num_nods),
+  ets:update_counter(Stats, num_nodes, 1),
+  State;
 
-do_cont(inc_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{num_radars = NumRadars + 1}};
 
-do_cont(dec_radars, #state{status_bar_stats = #stats{num_radars = NumRadars} = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{num_radars = NumRadars - 1}};
+do_cont(dec_nodes, State) ->
+  ets:update_counter(State#state.status_bar_stats, num_nodes, -1),
+  State;
 
-do_cont(set_radar_nums, #state{status_bar_stats = Stats} = State) ->
-  State#state{status_bar_stats = Stats#stats{num_radars = map_size(State#state.radars)}};
+do_cont(inc_radars, State) ->
+  ets:update_counter(State#state.status_bar_stats, num_radars, 1),
+  State;
 
-do_cont(set_detections, #state{status_bar_stats = Stats} = State) ->
+do_cont(dec_radars, State) ->
+  ets:update_counter(State#state.status_bar_stats, num_radars, -1),
+  State;
+
+do_cont(set_radar_nums, State) ->
+  ets:insert(State#state.status_bar_stats, {num_radars, map_size(State#state.radars)}),
+  State;
+
+do_cont(set_detections, State) ->
   DetectionNum = maps:fold(fun(_Key, #radar_info{samples = Samples}, Acc) -> Acc + length(Samples) end, 0, State#state.radars),
-  State#state{status_bar_stats = Stats#stats{active_detections = DetectionNum}};
+  ets:insert(State#state.status_bar_stats, {active_detections, DetectionNum}),
+  State;
 
 do_cont(draw_samples, State) ->
   DC = wxWindowDC:new(State#state.canvas),
@@ -1051,8 +1057,8 @@ stats_dialog(Env, Stats) ->
       end,
       ok
   end,
-  Names = record_info(fields, stats),
-  [_ | Values] = tuple_to_list(Stats),
+  StatsList = ets:tab2list(Stats),
+  {Names, Values} = lists:unzip(StatsList),
   wx:foreach(Fun, lists:zip3(lists:seq(0, length(Names) - 1), Names, Values)),
 
   wxBoxSizer:add(StatsSizer, ListCtrl, [
@@ -1067,7 +1073,6 @@ stats_dialog(Env, Stats) ->
   % wxBoxSizer:setMinSize(StatsSizer, 300, 300),
   wxDialog:setSizer(StatsDialog, StatsSizer),
   wxSizer:setSizeHints(StatsSizer, StatsDialog),
-
   wxDialog:showModal(StatsDialog),
   wxDialog:destroy(StatsDialog).
 
