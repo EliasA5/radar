@@ -453,7 +453,7 @@ handle_event(#wx{id=?FILE1_BUTTON, event=#wxCommand{type=command_button_clicked}
              #state{click_info = #click_info{selected = Selected}} = State) ->
   case sets:is_empty(Selected) of
     true -> operator:do_file(all, 0);
-    false -> operator:scan_both(sets:to_list(Selected), 0)
+    false -> operator:do_file(sets:to_list(Selected), 0)
   end,
   {noreply, State};
 
@@ -461,7 +461,7 @@ handle_event(#wx{id=?FILE2_BUTTON, event=#wxCommand{type=command_button_clicked}
              #state{click_info = #click_info{selected = Selected}} = State) ->
   case sets:is_empty(Selected) of
     true -> operator:do_file(all, 1);
-    false -> operator:scan_both(sets:to_list(Selected), 1)
+    false -> operator:do_file(sets:to_list(Selected), 1)
   end,
   {noreply, State};
 
@@ -469,7 +469,7 @@ handle_event(#wx{id=?FILE3_BUTTON, event=#wxCommand{type=command_button_clicked}
              #state{click_info = #click_info{selected = Selected}} = State) ->
   case sets:is_empty(Selected) of
     true -> operator:do_file(all, 2);
-    false -> operator:scan_both(sets:to_list(Selected), 2)
+    false -> operator:do_file(sets:to_list(Selected), 2)
   end,
   {noreply, State};
 
