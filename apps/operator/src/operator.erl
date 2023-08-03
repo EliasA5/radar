@@ -373,10 +373,7 @@ handle_continue(_Continue, State) ->
   ok.
 
 inotify_event(Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
-  gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename});
-
-inotify_event(Arg, _EventTag, ?inotify_msg(Masks, _Cookie, Name)) ->
-  io:format("unknown inotify event: Masks: ~p, Name: ~p, Arg ~p~n", [Masks, Name, Arg]).
+  gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename}).
 
 %%--------------------------------------------------------------------
 %% @private
