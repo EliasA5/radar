@@ -19,7 +19,6 @@ int main(void) {
 			case idle:
 				add_ack_tx_queue(MAKEACK(idle));
 				enterLPM_enable_interrupts(lpm_mode);
-				add_ack_tx_queue(2);
 				break;
 
 			case telemeter_s:
