@@ -18,42 +18,37 @@ int main(void) {
 		switch (state) {
 			case idle:
 				add_ack_tx_queue(MAKEACK(idle));
-				enable_interrupts();
-				enterLPM(lpm_mode);
+				enterLPM_enable_interrupts(lpm_mode);
+				add_ack_tx_queue(2);
 				break;
 
 			case telemeter_s:
 				telemeter_s_enter();
-				enable_interrupts();
-				enterLPM(lpm_mode);
+				enterLPM_enable_interrupts(lpm_mode);
 				telemeter_s_leave();
 				break;
 
 			case file_rec_s:
 				file_rec_s_enter();
-				enable_interrupts();
-				enterLPM(lpm_mode);
+				enterLPM_enable_interrupts(lpm_mode);
 				file_rec_s_leave();
 				break;
 
 			case sonic_d:
 				sonic_d_enter();
-				enable_interrupts();
-				enterLPM(lpm_mode);
+				enterLPM_enable_interrupts(lpm_mode);
 				sonic_d_leave();
 				break;
 
 			case ldr_d:
 				ldr_d_enter();
-				enable_interrupts();
-				enterLPM(lpm_mode);
+				enterLPM_enable_interrupts(lpm_mode);
 				ldr_d_leave();
 				break;
 
 			case dual_d:
 				dual_d_enter();
-				enable_interrupts();
-				enterLPM(lpm_mode);
+				enterLPM_enable_interrupts(lpm_mode);
 				dual_d_leave();
 				break;
 

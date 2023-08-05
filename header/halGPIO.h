@@ -23,7 +23,7 @@ extern void adc_set_calibrate(void);
 
 extern void delay(unsigned int);
 extern void delayms(unsigned int);
-
+extern void enterLPM_enable_interrupts(unsigned char);
 extern void enterLPM(unsigned char);
 extern void enable_interrupts();
 extern inline void disable_interrupts();

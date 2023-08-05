@@ -168,6 +168,29 @@ void disable_t0timer(void)
 	Timer0Ctl &= ~MC_3;
 }
 
+void enterLPM_enable_interrupts(unsigned char LPM_level)
+{
+
+	switch (LPM_level){
+		case 0x00:
+			_BIS_SR(LPM0_bits + GIE);
+			break;
+		case 0x01:
+			_BIS_SR(LPM1_bits + GIE);
+			break;
+		case 0x02:
+			_BIS_SR(LPM2_bits + GIE);
+			break;
+		case 0x03:
+			_BIS_SR(LPM3_bits + GIE);
+			break;
+		case 0x04:
+			_BIS_SR(LPM4_bits + GIE);
+			break;
+		default: break;
+	}
+}
+
 void enterLPM(unsigned char LPM_level)
 {
 

@@ -429,7 +429,7 @@ void file_enter()
 	}
 
 	if(sleep)
-		enterLPM(lpm_mode);
+		enterLPM_enable_interrupts(lpm_mode);
 }
 
 void file_leave()
