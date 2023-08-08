@@ -1086,12 +1086,11 @@ draw_radar_on_dc(_Key, #radar_info{pos = Pos, bitmap = Bmp}, false, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
   ok;
 
-draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle, bitmap = Bmp, node = Node}, true, DC) ->
+draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle,
+                                   bitmap = Bmp, node = Node, name = Name}, true, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
-  PositionText = io_lib:format("~p~n(~p, ~p) ", [Node, X, Y]),
-  LastText = io_lib:format("~p", [Angle]),
-  FinalText = erlang:iolist_to_binary([PositionText, unicode:characters_to_binary("∡"), LastText]),
-  wxDC:drawLabel(DC, FinalText,
+  Text = io_lib:format("~p~n~p~n(~p, ~p) ∡~p", [Node, Name, X, Y, Angle]),
+  wxDC:drawLabel(DC, Text,
         {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]),
   ok.
 
