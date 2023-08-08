@@ -1089,7 +1089,7 @@ draw_radar_on_dc(_Key, #radar_info{pos = Pos, bitmap = Bmp}, false, DC) ->
 draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle,
                                    bitmap = Bmp, node = Node, name = Name}, true, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
-  Text = io_lib:format("~p~n~p~n(~p, ~p) ∡~p", [Node, Name, X, Y, Angle]),
+  Text = io_lib:format("~p~n~.30. s~n(~p, ~p) ∡~p", [Node, Name, X, Y, Angle]),
   wxDC:drawLabel(DC, Text,
         {X - 10, Y + 2*?BITMAP_HEIGHT, 1, 1}, [{alignment, ?wxALIGN_LEFT}]),
   ok.
