@@ -32,7 +32,7 @@
 -record(state, {comm_map, inotify_ref, radar_node, inotify_img_ref,
                 last_radar_node = nonode@nohost, cache = false}).
 
--record(comm_info, {atom_name, samples = [], acks = 0, nacks = 0}).
+-record(comm_info, {atom_name, samples = [], type, acks = 0, nacks = 0}).
 
 %%%===================================================================
 %%% API
@@ -309,10 +309,10 @@ handle_cast({inotify, dev, _EventTag, _Masks, _Name}, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
-handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
+handle_info({'EXIT', Pid, _Reason}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
   case maps:take(Pid, CommMap) of
-    {Info, NewMap} ->
-      Ref = case map_size(NewMap) of
+    {#comm_info{type = msp} = Info, NewMap} ->
+      Ref = case num_real_connected(NewMap) of
         0 ->
           inotify:unwatch(OldRef),
           NewRef = inotify:watch("/dev", [create]),
@@ -322,6 +322,9 @@ handle_info({'EXIT', Pid, normal}, #state{comm_map = CommMap, inotify_ref = OldR
           OldRef
       end,
       {noreply, State#state{comm_map = NewMap, inotify_ref = Ref},
+                {continue, {disconnect_radar, [{Pid, Info}]}}};
+    {#comm_info{type = img} = Info, NewMap} ->
+      {noreply, State#state{comm_map = NewMap},
                 {continue, {disconnect_radar, [{Pid, Info}]}}};
     error ->
       %% who died?
@@ -452,7 +455,7 @@ get_comm(Name) ->
     {match, [{F, L} | _]} ->
       Filename = string:sub_string(Name, F+1, F+L),
       {ok, Cid} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Filename}]),
-      {true, {Cid, #comm_info{atom_name = list_to_atom(Filename)}}};
+      {true, {Cid, #comm_info{atom_name = list_to_atom(Filename), type = msp}}};
     nomatch ->
       false
   end.
@@ -469,7 +472,7 @@ get_img_comm(Name) ->
     {match, [{F, L} | _]} ->
       Filename = string:sub_string(Name, F+1, F+L),
       {ok, Cid} = communication_img:start_link([{port_file, "dev/" ++ Filename}]),
-      {true, {Cid, #comm_info{atom_name = list_to_atom(Filename)}}};
+      {true, {Cid, #comm_info{atom_name = list_to_atom(Filename), type = img}}};
     nomatch ->
       false
   end.
@@ -519,4 +522,12 @@ radar_down() ->
   % add a dialog that allows the user to input a new radar node name
   % might be a problem with distributed since we may not have access to a screen
   ok.
+
+num_real_connected(Map) when is_map(Map) ->
+  maps:fold(fun
+              (_Key, #comm_info{type = msp}, Accum) -> Accum + 1;
+              (_Key, _, Accum) -> Accum
+            end,
+            0,
+            Map).
 
