@@ -565,7 +565,7 @@ handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State)
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, bitmap = Bmp}};
     [{_, #radar_info{pos = {X, Y}, angle = Angle}}] ->
       Bmp = get_image_bitmap(?RADAR_DRAWING, Angle),
-      Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
+      Pos = reclip(X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
   {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, inc_msg, redraw_stat_bar, redraw]}};
