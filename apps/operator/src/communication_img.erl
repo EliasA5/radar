@@ -102,7 +102,8 @@ init(Args) ->
                    Data :: term()) ->
   gen_statem:event_handler_result(term()).
 
-handle_event(cast, {inotify, _Arg, _EventTag, _Masks, _Filename}, _State, _Data) ->
+handle_event(cast, {inotify, _Arg, _EventTag, _Masks, _Filename}, _State, Data) ->
+  inotify:unwatch(Data#data.inotify_ref),
   {stop, normal};
 
 handle_event({call,From}, _Msg, State, Data) ->
