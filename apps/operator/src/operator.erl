@@ -29,7 +29,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {comm_map, inotify_ref, radar_node,
+-record(state, {comm_map, inotify_ref, radar_node, inotify_img_ref,
                 last_radar_node = nonode@nohost, cache = false}).
 
 -record(comm_info, {atom_name, samples = [], acks = 0, nacks = 0}).
@@ -138,7 +138,8 @@ init([]) ->
     ok ->
       init_serial()
   end,
-  {ok, #state{comm_map = CommMap, inotify_ref = Ref, radar_node = RadarNode}, {continue, reconnect}}.
+  {ImgMap, ImgRef} = init_img(),
+  {ok, #state{comm_map = maps:merge(CommMap, ImgMap), inotify_ref = Ref, inotify_img_ref = ImgRef, radar_node = RadarNode}, {continue, reconnect}}.
 
 init_dev() ->
   Ref = inotify:watch("/dev", [create]),
@@ -150,6 +151,15 @@ init_serial() ->
   Ref = inotify:watch("/dev/serial/by-id", [create]),
   inotify:add_handler(Ref, ?SERVER, ser),
   {CommMap, Ref}.
+
+init_img() ->
+  case filelib:ensure_dir("dev/") of
+    {error, _Err} -> {#{}, make_ref()};
+    ok ->
+      Ref = inotify:watch("dev/", [create]),
+      inotify:add_handler(Ref, ?SERVER, img),
+      {get_all_img_comms(), Ref}
+  end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -274,6 +284,15 @@ handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = Ol
   inotify:add_handler(Ref, ?SERVER, ser),
   {noreply, State#state{comm_map = CommMap, inotify_ref = Ref},
             {continue, {connect_radar, maps:to_list(CommMap)}}};
+
+handle_cast({inotify, img, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
+  case get_img_comm(Name) of
+    {true, {Cid, CommInfo}} ->
+      {noreply, State#state{comm_map = CommMap#{Cid => CommInfo}},
+                {continue, {connect_radar, [{Cid, CommInfo}]}}};
+    false ->
+      {noreply, State}
+  end;
 
 handle_cast({inotify, dev, _EventTag, _Masks, _Name}, State) ->
   {noreply, State}.
@@ -433,6 +452,23 @@ get_comm(Name) ->
     {match, [{F, L} | _]} ->
       Filename = string:sub_string(Name, F+1, F+L),
       {ok, Cid} = communication:start_link([{port_file, "/dev/serial/by-id/" ++ Filename}]),
+      {true, {Cid, #comm_info{atom_name = list_to_atom(Filename)}}};
+    nomatch ->
+      false
+  end.
+
+get_all_img_comms() ->
+  {ok, Filenames} = file:list_dir("dev/"),
+  Comms = lists:filtermap(fun get_img_comm/1, Filenames),
+  CommMap = maps:from_list(Comms),
+  CommMap.
+
+get_img_comm(Name) ->
+  RegExp = "radar_[0-9A-Z]+",
+  case re:run(Name, RegExp) of
+    {match, [{F, L} | _]} ->
+      Filename = string:sub_string(Name, F+1, F+L),
+      {ok, Cid} = communication_img:start_link([{port_file, "dev/" ++ Filename}]),
       {true, {Cid, #comm_info{atom_name = list_to_atom(Filename)}}};
     nomatch ->
       false
