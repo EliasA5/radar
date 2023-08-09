@@ -26,7 +26,15 @@
 
 -define(SERVER, ?MODULE).
 
--record(data, {file, operator_port, inotify_ref}).
+-define(LOWPROB, 0.2).
+
+-define(MIDPROB, 0.5).
+
+-define(HIGHPROB, 0.8).
+
+-record(data, {file, operator_port, inotify_ref,
+               intensity, angle = 0, curr_file = <<>>, file_replace = 0,
+               files = {<<>>, <<>>, <<>>}}).
 
 %%%===================================================================
 %%% API
@@ -89,6 +97,7 @@ init(Args) ->
 %% @private
 %% @doc
 %% This function is called for every event a gen_statem receives.
+%% possible states: [idle, scan_us, scan_ldr, scan_both, telemeter, do_file]
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_event('enter',
@@ -106,10 +115,42 @@ handle_event(cast, {inotify, _Arg, _EventTag, _Masks, _Filename}, _State, Data) 
   inotify:unwatch(Data#data.inotify_ref),
   {stop, normal};
 
-handle_event({call,From}, _Msg, State, Data) ->
-  {next_state, State, Data, [{reply,From,ok}]}.
+handle_event(cast, {send, ?IDLE_CMD, []}, _State, Data) ->
+  {next_state, idle, Data#data{angle = 0}};
 
+handle_event(cast, {send, ?SONIC_D_CMD, []}, _State, Data) ->
+  {next_state, scan_us, Data#data{angle = 0}};
 
+handle_event(cast, {send, ?LDR_D_CMD, []}, _State, Data) ->
+  {next_state, scan_ldr, Data#data{angle = 0}};
+
+handle_event(cast, {send, ?DUAL_D_CMD, []}, _State, Data) ->
+  {next_state, scan_both, Data#data{angle = 0}};
+
+handle_event(cast, {send, telemeter, Angle}, _State, Data) ->
+  {next_state, telemeter, Data#data{angle = Angle}};
+
+handle_event(cast, {send, ?FILE_0_CMD, []}, _State, #data{files = {File, _, _}} = Data) ->
+  {next_state, do_file, Data#data{angle = 0, curr_file = File}};
+
+handle_event(cast, {send, ?FILE_1_CMD, []}, _State, #data{files = {_, File, _}} = Data) ->
+  {next_state, do_file, Data#data{angle = 0, curr_file = File}};
+
+handle_event(cast, {send, ?FILE_2_CMD, []}, _State, #data{files = {_, _, File}} = Data) ->
+  {next_state, do_file, Data#data{angle = 0, curr_file = File}};
+
+handle_event(cast, {send, file, ParsedFile}, _State,
+              #data{file_replace = FileReplace, files = Files} = Data) ->
+  {next_state, idle, Data#data{files = setelement(FileReplace, Files, ParsedFile),
+                               file_replace = (FileReplace + 1) rem 3}};
+
+handle_event(info, advance, idle, _Data) ->
+  keep_state_and_data;
+
+handle_event(info, advance, State, Data) ->
+  Sample = generate_random_sample(State, Data),
+  %% update data angle
+  {next_state, scan_us, Data}.
 
 inotify_event(Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
   gen_statem:cast(Arg, {inotify, Arg, EventTag, Masks, Filename}).
@@ -146,4 +187,27 @@ code_change(_OldVsn, State, Data, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+% ultrasonic sample format
+% Angle [0, 180], Distrance [2, 450]
+% {ultrasonic, self(), {Angle, Distance}}
+
+% ldr sample format
+% Angle [0, 180], Distrance [2, 50]
+% {ldr, self(), {Angle, Distance}}
+
+generate_random_sample(State, #data{intensity = Intensity, angle = Angle} = Data) ->
+  RadiusMean = 2*rand:uniform(25),
+  RadiusVariance = rand:normal(0, 1),
+  Radius = RadiusMean + RadiusVariance,
+  SampleProb = case Intensity of
+    low -> ?HIGHPROB;
+    mid -> ?MIDPROB;
+    high -> ?HIGHPROB
+  end,
+  case (rand:uniform()) of
+    Prob when Prob > SampleProb ->
+      ok;
+    _ ->
+      {Radius, Angle}
+   end.
 
