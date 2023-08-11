@@ -673,8 +673,11 @@ handle_cast({Pid, Samples}, #state{us_max_min = {Min, Max}} = State) when (is_pi
                             SamplesTime = lists:filtermap(
                                             fun
                                               ({ultrasonic, _Angle, Dist}) when Dist < Min orelse Dist > Max -> false;
+                                              ({ultrasonic, _Time, _Angle, Dist}) when Dist < Min orelse Dist > Max -> false;
                                               ({Type, Angle, Dist}) ->
-                                                {true, {Type, erlang:monotonic_time(millisecond), Angle, Dist}}
+                                                {true, {Type, erlang:monotonic_time(millisecond), Angle, Dist}};
+                                              ({Type, Time, Angle, Dist}) ->
+                                                {true, {Type, erlang:monotonic_time(millisecond) + Time, Angle, Dist}}
                                             end, Samples),
                             NewSamples = SamplesTime ++ OldSamples,
                             RadarInfo#radar_info{samples = NewSamples}

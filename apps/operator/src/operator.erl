@@ -18,7 +18,7 @@
 -export([start_link/0, start_link/1]).
 
 -export([scan_us/1, scan_ldr/1, scan_both/1, telemeter/2, go_idle/1,
-        do_file/2, send_file/2, reconnect/1, reconnect/0]).
+        do_file/2, send_file/2, reconnect/1, reconnect/0, set_send_rate/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -30,7 +30,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {comm_map, inotify_ref, radar_node, inotify_img_ref,
-                last_radar_node = nonode@nohost, cache = false}).
+                last_radar_node = nonode@nohost, cache = false, tref}).
 
 -record(comm_info, {atom_name, samples = [], type, acks = 0, nacks = 0}).
 
@@ -113,6 +113,11 @@ do_file(Whom, Which) ->
 send_file(Whom, ParsedFile) ->
   gen_server:abcast(nodes(), ?SERVER, {send_file, Whom, ParsedFile}).
 
+-spec set_send_rate(Cache :: boolean(), Time :: integer()) -> ok.
+
+set_send_rate(Cache, Time) ->
+  gen_server:call(?SERVER, {cache, Cache, Time}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -139,7 +144,9 @@ init([]) ->
       init_serial()
   end,
   {ImgMap, ImgRef} = init_img(),
-  {ok, #state{comm_map = maps:merge(CommMap, ImgMap), inotify_ref = Ref, inotify_img_ref = ImgRef, radar_node = RadarNode}, {continue, reconnect}}.
+  {ok, #state{comm_map = maps:merge(CommMap, ImgMap),
+              inotify_ref = Ref, inotify_img_ref = ImgRef, radar_node = RadarNode},
+              {continue, reconnect}}.
 
 init_dev() ->
   Ref = inotify:watch("/dev", [create]),
@@ -177,6 +184,18 @@ init_img() ->
   {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
   {stop, Reason :: term(), NewState :: term()}.
 
+handle_call({cache, false, _Time}, _from, State) ->
+  timer:cancel(State#state.tref),
+  {reply, ok, State#state{cache = false, tref = none}};
+
+handle_call({cache, true, Time}, _from, State) when Time > 0 ->
+  timer:cancel(State#state.tref),
+  {ok, NewTRef} = timer:send_interval(Time, send_samples),
+  {reply, ok, State#state{cache = true, tref = NewTRef}};
+
+handle_call({cache, true, _Time}, _from, State) ->
+  {reply, nok, State};
+
 handle_call({reconnect, RadarNode}, _from, State) ->
   %% we can probably destroy wx here
   {reply, ok, State#state{radar_node = RadarNode}, {continue, reconnect}};
@@ -204,17 +223,21 @@ handle_call(_Request, _From, State) ->
   {stop, Reason :: term(), NewState :: term()}.
 
 %% From Communication Ports
-handle_cast({ultrasonic, Cid, {Angle, Distance}} = _SampleUS, #state{cache = false} = State) ->
-  gen_server:cast({global, radar}, {Cid,
-                                           [{ultrasonic, Angle, Distance}]
-                                          }),
+handle_cast({Type, Cid, {Angle, Distance}} = _SampleUS, #state{cache = false} = State) ->
+  gen_server:cast({global, radar}, {Cid, [{Type, Angle, Distance}]}),
   {noreply, State};
 
-handle_cast({ldr, Cid, {Angle, Distance}} = _SampleLdr, #state{cache = false} = State) ->
-  gen_server:cast({global, radar}, {Cid,
-                                           [{ldr, Angle, Distance}]
-                                          }),
-  {noreply, State};
+handle_cast({Type, Cid, {Angle, Distance}} = _SampleUS, #state{cache = true} = State) ->
+  try maps:update_with(Cid,
+                      fun(#comm_info{samples = Samples} = CommInfo) ->
+                          CommInfo#comm_info{samples =
+                          [{Type, erlang:monotonic_time(millisecond), Angle, Distance} | Samples]}
+                      end, State#state.comm_map) of
+    NewCommMap ->
+      {noreply, State#state{comm_map = NewCommMap}}
+  catch
+    _Err:{badkey, _} -> {noreply, State}
+  end;
 
 handle_cast({ack, Cid, _Ack}, #state{comm_map = CommMap} = State) ->
   %% should never fail
@@ -308,6 +331,24 @@ handle_cast({inotify, dev, _EventTag, _Masks, _Name}, State) ->
   {noreply, NewState :: term(), Timeout :: timeout()} |
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
+
+handle_info(send_samples, #state{cache = false} = State) ->
+  {noreply, State};
+
+handle_info(send_samples, #state{cache = true} = State) ->
+  NewCommMap = 
+    maps:map(fun
+            (_Cid, #comm_info{samples = []} = CommInfo) -> CommInfo;
+            (Cid, #comm_info{samples = Samples} = CommInfo) ->
+              {_, FirstTime, _, _} = lists:last(Samples),
+              NewSamples = lists:map(fun
+                ({Type, Angle, Distance}) -> {Type, 0, Angle, Distance};
+                ({Type, Time, Angle, Distance}) -> {Type, Time - FirstTime, Angle, Distance}
+              end, Samples),
+              gen_server:cast({global, radar}, {Cid, NewSamples}),
+              CommInfo#comm_info{samples = []}
+           end, State#state.comm_map),
+  {noreply, State#state{comm_map = NewCommMap}};
 
 handle_info({'EXIT', Pid, _Reason}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
   case maps:take(Pid, CommMap) of
