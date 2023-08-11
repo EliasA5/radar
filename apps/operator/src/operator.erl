@@ -467,11 +467,12 @@ get_all_img_comms() ->
   CommMap.
 
 get_img_comm(Name) ->
-  RegExp = "radar_[0-9A-Z]+",
+  RegExp = "radar_[0-9a-zA-Z]+",
   case re:run(Name, RegExp) of
     {match, [{F, L} | _]} ->
       Filename = string:sub_string(Name, F+1, F+L),
       {ok, Cid} = communication_img:start_link([{port_file, "dev/" ++ Filename}]),
+      % sys:trace(Cid, true),
       {true, {Cid, #comm_info{atom_name = list_to_atom(Filename), type = img}}};
     nomatch ->
       false
