@@ -188,7 +188,7 @@ handle_call({cache, false, _Time}, _from, State) ->
   timer:cancel(State#state.tref),
   {reply, ok, State#state{cache = false, tref = none}};
 
-handle_call({cache, true, Time}, _from, State) when Time > 0 ->
+handle_call({cache, true, Time}, _from, State) when Time > 40 ->
   timer:cancel(State#state.tref),
   {ok, NewTRef} = timer:send_interval(Time, send_samples),
   {reply, ok, State#state{cache = true, tref = NewTRef}};
