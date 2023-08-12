@@ -290,7 +290,7 @@ init([]) ->
   StatsList = [{Key, 0} || Key <- StatsKeys],
   ets:insert(StatsETS, StatsList),
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}]),
-  {ok, _RedrawTRef} = timer:send_interval(20, redraw),
+  {ok, _RedrawTRef} = timer:send_after(20, redraw),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
               background = Background, noti_box = NotificationsBox, status_bar = StatusBar,
               status_bar_stats = StatsETS, click_info = #click_info{selected = sets:new()}, radars = #{}},
@@ -768,6 +768,7 @@ do_cont(redraw, #state{background = {BackgroundBitmap, _},
         end,
   NewRadars = draw(State#state.canvas, Bitmap, Fun),
   wxBitmap:destroy(Bitmap),
+  {ok, _RedrawTRef} = timer:send_after(20, redraw),
   State#state{radars = NewRadars};
 
 do_cont(clear_samples, #state{radars = Radars} = State) ->
