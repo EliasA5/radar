@@ -784,14 +784,6 @@ do_cont(inc_msg, State) ->
   State;
 
 do_cont({log, Str, Args}, #state{noti_box = TextCtrl} = State) ->
-  case wxTextCtrl:getNumberOfLines(TextCtrl) of
-    N when N > 20 ->
-      Data = wxTextCtrl:getValue(State#state.noti_box),
-      {ok, Dev} = file:open("radar_log.txt", [append]),
-      file:write(Dev, Data),
-      file:close(Dev);
-    _ -> ok
-  end,
   append_textbox(TextCtrl, Str, Args),
   State;
 
