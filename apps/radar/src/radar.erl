@@ -291,8 +291,8 @@ init([]) ->
   StatsKeys = [uptime, rec_msg, num_nodes, num_radars, active_detections],
   StatsList = [{Key, 0} || Key <- StatsKeys],
   ets:insert(StatsETS, StatsList),
-
   {ok, RadarBackup} = dets:open_file(radar_backup, [{auto_save, 60000}]),
+  {ok, _RedrawTRef} = timer:send_interval(20, redraw),
   {ok, #state{frame = Frame, canvas = Canvas, radar_backup = RadarBackup, detections_bar = DetectionsText,
               background = Background, noti_box = NotificationsBox, status_bar = StatusBar,
               status_bar_stats = StatsETS, click_info = #click_info{selected = sets:new()}, radars = #{}},
@@ -317,7 +317,7 @@ handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
   Bmp = get_image_bitmap(?RADAR_DRAWING),
   Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
   NewRadars = Radars#{X => #radar_info{pos = Pos, bitmap = Bmp}},
-  {noreply, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar, redraw]}};
+  {noreply, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar]}};
 
 handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
   Prev = State#state.click_info#click_info.key,
@@ -379,7 +379,7 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
                             Radars, Selected),
       {noreply, State#state{radars = NewRadars,
                             click_info = #click_info{selected = sets:new()}
-                           }, {continue, redraw}};
+                           }};
     {Key, _Object} ->
       NewRadars = Update_Radar_Bitmaps(Key, Radars, ?RADAR_DRAWING_SELECTED),
       wxPanel:connect(State#state.canvas, motion),
@@ -388,18 +388,16 @@ handle_event(#wx{event = #wxMouse{type=left_down, x=X, y=Y}},
       NewOffset = {X - X0 - ?BITMAP_WIDTH, Y - Y0 - ?BITMAP_HEIGHT},
       {noreply, State#state{radars = NewRadars,
                             click_info = #click_info{key = Key, offset = NewOffset, selected = sets:add_element(Key, Selected)}
-                           }, {continue, redraw}}
+                           }}
   end;
 
 handle_event(#wx{event = #wxMouse{type=motion, x=X1, y=Y1}} = _Cmd,
              #state{click_info = #click_info{key = Key, offset = {Dx, Dy}}} = State) ->
   NewPos = reclip(X1-Dx, Y1-Dy, wxPanel:getSize(State#state.canvas)),
   try maps:update_with(Key, fun(Info) -> Info#radar_info{pos = NewPos} end, State#state.radars) of
-    NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, [clear_samples, redraw]}}
+    NewRadars -> {noreply, State#state{radars = NewRadars}}
   catch
-    _Err:{badkey, _} ->
-      {noreply, State}
+    _Err:{badkey, _} -> {noreply, State}
   end;
 
 handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo} = State) ->
@@ -409,10 +407,10 @@ handle_event(#wx{event = #wxMouse{type=left_up}}, #state{click_info = ClickInfo}
 
 %% Window Events
 handle_event(#wx{event = #wxSize{}}, State) ->
-  {noreply, State, {continue, [clear_samples, redraw]}};
+  {noreply, State, {continue, clear_samples}};
 
 handle_event(#wx{event = #wxIconize{}}, State) ->
-  {noreply, State, {continue, [clear_samples, redraw]}};
+  {noreply, State, {continue, clear_samples}};
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   {stop, normal, State};
@@ -568,7 +566,7 @@ handle_call({connect_radar, Node, Info}, _From, #state{radars = Radars} = State)
       Pos = reclip(X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT, wxPanel:getSize(State#state.canvas)),
       Radars#{Pid => #radar_info{name = Name, node = Node, pid = Pid, pos = Pos, angle = Angle, bitmap = Bmp}}
     end,
-  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, inc_msg, redraw_stat_bar, redraw]}};
+  {reply, ok, State#state{radars = NewRadars}, {continue, [{log, "Radar ~p connected~n", [Name]}, inc_radars, inc_msg, redraw_stat_bar]}};
 
 handle_call({disconnect_radar, _Node, Info}, _From,
             #state{click_info = #click_info{selected = Selected} = ClickInfo} = State) ->
@@ -581,7 +579,7 @@ handle_call({disconnect_radar, _Node, Info}, _From,
       NewSelected = sets:del_element(Pid, Selected),
       {reply, ok, State#state{radars = NewRadars,
                               click_info = ClickInfo#click_info{selected = NewSelected}
-                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, inc_msg, redraw_stat_bar, redraw]}}
+                             }, {continue, [{log, "Radar ~p disconnected~n", [Name]}, dec_radars, inc_msg, redraw_stat_bar]}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State, {continue, inc_msg}}
@@ -605,7 +603,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                             end, ClickInfo#click_info.selected),
   {reply, ok, State#state{radars = NewRadars,
                           click_info = ClickInfo#click_info{selected = NewSelected}
-                         }, {continue, [{log, "Operator ~p reconnected~n", [Node]}, set_radar_nums, inc_msg, redraw_stat_bar, redraw]}};
+                         }, {continue, [{log, "Operator ~p reconnected~n", [Node]}, set_radar_nums, inc_msg, redraw_stat_bar]}};
 
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
@@ -619,7 +617,7 @@ handle_call({update_angle, Key, Angle}, _From, State) ->
                            Info#radar_info{bitmap = Bmp, angle = Angle}
                        end, State#state.radars) of
     NewRadars ->
-      {reply, ok, State#state{radars = NewRadars}, {continue, [redraw, inc_msg]}}
+      {reply, ok, State#state{radars = NewRadars}, {continue, inc_msg}}
   catch
     _Err:{badkey, _} ->
       {reply, ok, State, {continue, inc_msg}}
@@ -648,7 +646,7 @@ handle_call({send_telemeter, Angle}, _From,
 handle_call({new_background, NewPath}, _From,
               #state{background = {BackgroundBitmap, _BackgroundPath}} = State) ->
   {reply, ok, State#state{background = {BackgroundBitmap, NewPath}},
-  {continue, [load_background, redraw]}};
+  {continue, load_background}};
 
 
 handle_call(_Request, _From, State) ->
@@ -683,7 +681,7 @@ handle_cast({Pid, Samples}, #state{us_max_min = {Min, Max}} = State) when (is_pi
                             RadarInfo#radar_info{samples = NewSamples}
                         end, State#state.radars) of
     NewRadars ->
-      {noreply, State#state{radars = NewRadars}, {continue, [inc_msg, redraw, set_detections, redraw_detections_bar]}}
+      {noreply, State#state{radars = NewRadars}, {continue, [inc_msg, set_detections, redraw_detections_bar]}}
   catch
     _Err:{badkey, _} -> {noreply, State}
   end;
@@ -703,12 +701,15 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
+handle_info(redraw, State) ->
+  {noreply, State, {continue, redraw}};
+
 handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = Stats} = State) ->
   Uptime = ets:update_counter(Stats, uptime, 1),
   {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
   UptimeStr = io_lib:format("~2..0w:~2..0w:~2..0w", [Hours, Minutes, Seconds]),
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
-  {noreply, State, {continue, [redraw, set_detections, redraw_detections_bar]}};
+  {noreply, State, {continue, [set_detections, redraw_detections_bar]}};
 
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
@@ -731,7 +732,7 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
                             end, ClickInfo#click_info.selected),
   {noreply, State#state{radars = NewRadars,
                         click_info = ClickInfo#click_info{selected = NewSelected}},
-            {continue, [inc_msg, set_radar_nums, dec_nodes, redraw_stat_bar, redraw,
+            {continue, [inc_msg, set_radar_nums, dec_nodes, redraw_stat_bar,
                          {log,  "node ~p disconnected~n", [Node]}]}};
 
 handle_info({nodeup, Node}, State) ->
