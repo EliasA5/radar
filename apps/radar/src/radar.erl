@@ -213,15 +213,15 @@ init([]) ->
   wxGridSizer:add(ButtonGridSizer, IdleButton,
                   [{proportion, 0}, {flag, ?wxALIGN_TOP bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
-  File1Button = wxButton:new(Frame, ?FILE1_BUTTON, [{label, "Start file 1"}]),
+  File1Button = wxButton:new(Frame, ?FILE1_BUTTON, [{label, "Start File 1"}]),
   wxGridSizer:add(ButtonGridSizer, File1Button,
                   [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_LEFT bor ?wxEXPAND}]),
 
-  File2Button = wxButton:new(Frame, ?FILE2_BUTTON, [{label, "Start file 2"}]),
+  File2Button = wxButton:new(Frame, ?FILE2_BUTTON, [{label, "Start File 2"}]),
   wxGridSizer:add(ButtonGridSizer, File2Button,
                   [{proportion, 0}, {flag, ?wxALIGN_CENTER bor ?wxEXPAND}]),
 
-  File3Button = wxButton:new(Frame, ?FILE3_BUTTON, [{label, "Start file 3"}]),
+  File3Button = wxButton:new(Frame, ?FILE3_BUTTON, [{label, "Start File 3"}]),
   wxGridSizer:add(ButtonGridSizer, File3Button,
                   [{proportion, 0}, {flag, ?wxALIGN_CENTER_VERTICAL bor ?wxALIGN_RIGHT bor ?wxEXPAND}]),
 
@@ -1181,4 +1181,4 @@ append_textbox(TextCtrl, Str, Args)->
   ok.
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
-  ((round(math:atan2(Y1 - Y0, X1 - X0) * 180 / math:pi())) + 180 - Angle) rem 360.
+  round((math:atan2(Y1 - Y0 - ?BITMAP_HEIGHT, X1 - X0 - ?BITMAP_WIDTH) * 180 / math:pi()) + 180 - Angle) rem 360.
