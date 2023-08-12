@@ -1,8 +1,29 @@
 TODO List
 
-1. Add virtual radar to radar.erl (Wendensday morning)
+1. Add virtual radar to radar.erl (Wendensday morning) [v]
 2. Add documentation and comments
 3. Create a Power Point presentation
 4. Finish Overleaf Report
 5. Create a YouTube video
-6. Test project on lab's computers
+6. Test project on lab's computers [v]
+
+
+PPT Slides:
+
+- Opening
+- Overview
+- Design
+- Hardware
+- Communication (pc side, msp side, both FSMs, explain about Erlang Postpone)
+- Word about inotify
+- Word about the supervisors
+- Project architecture (git, makefile, rebar (umbrella project),...)
+- Word about the gui: we wanted wx:object behaviour but changed to gen:server + extensive use of handle_cont
+- Design of the gui: handlers, inner functions, main mechanism
+- Graphic Features
+- Show off the project
+- Abillites, bottlenecks, benchmark tests
+- Difficulties:
+- Possible upgrades:
+    -  Opon fall, move the state info (the statistics ETS) from the gui to a new gui (add fault-tolerance to the app)
+- Questions
