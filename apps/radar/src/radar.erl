@@ -629,9 +629,13 @@ handle_call({send_telemeter, Angle}, _From,
 
 handle_call({new_background, NewPath}, _From,
               #state{background = {BackgroundBitmap, _BackgroundPath}} = State) ->
-  {reply, ok, State#state{background = {BackgroundBitmap, NewPath}},
-  {continue, load_background}};
-
+  case filename:dirname(NewPath) == filename:absname("shapes") of
+    true ->
+      {reply, ok, State, {continue, {easter_egg, NewPath}}};
+    false ->
+      {reply, ok, State#state{background = {BackgroundBitmap, NewPath}},
+       {continue, load_background}}
+  end;
 
 handle_call(_Request, _From, State) ->
   io:format("~w~n", [_Request]),
@@ -810,6 +814,15 @@ do_cont(redraw_background, #state{background = {BackgroundBitmap, _}} = State) -
   wxBitmap:destroy(Bitmap),
   State;
 
+do_cont({easter_egg, Path}, State) ->
+  Args = [{access, read}, {file, Path}, {type, set}, {repair, false}],
+  case dets:open_file(shape, Args) of
+    {ok, Ref} ->
+      NewState = update_state_from_dets(Ref, State),
+      dets:close(Ref),
+      NewState;
+    {error, _} -> State
+  end;
 
 do_cont(redraw_stat_bar, State) ->
   [{_, NumNodes}] = ets:lookup(State#state.status_bar_stats, num_nodes),
@@ -1183,3 +1196,17 @@ append_textbox(TextCtrl, Str, Args)->
 
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
   round((math:atan2(Y1 - Y0 - ?BITMAP_HEIGHT, X1 - X0 - ?BITMAP_WIDTH) * 180 / math:pi()) + 180 - Angle) rem 360.
+
+update_state_from_dets(Dets, State) ->
+  NewRadars = maps:map(fun
+                         (_, #radar_info{name = Name} = RadarInfo) ->
+                           case dets:lookup(Dets, Name) of
+                             [] -> RadarInfo;
+                             [{_, #radar_info{pos = {X, Y}, angle = Angle}}] ->
+                               Pos = reclip(X + ?BITMAP_WIDTH, Y + ?BITMAP_HEIGHT, wxPanel:getSize(State#state.canvas)),
+                               RadarInfo#radar_info{pos = Pos, angle = Angle}
+                           end
+                       end, State#state.radars),
+  State#state{radars = NewRadars}.
+
+
