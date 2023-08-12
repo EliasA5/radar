@@ -37,7 +37,6 @@
           status_bar_stats,
           click_info,
           radars,
-          single_sample = false,
           radar_backup,
           noti_box,
           chosen_file = {"~", ""},
@@ -277,7 +276,6 @@ init([]) ->
   wxPanel:connect(Canvas, size),
   wxPanel:connect(Canvas, left_down),
   wxPanel:connect(Canvas, right_down),
-  wxPanel:connect(Canvas, middle_down),
   {ok, _TRef} = timer:send_interval(1000, {advance_uptime}),
   Icon = wxIcon:new("imgs/app_icon.png"),
   wxFrame:setIcon(Frame, Icon),
@@ -312,15 +310,7 @@ init([]) ->
   {stop, Reason :: term(), NewState :: term()}.
 
 %% Mouse Events
-handle_event(#wx{event = #wxMouse{type=middle_down, x=X, y=Y}},
-             #state{radars = Radars} = State) ->
-  Bmp = get_image_bitmap(?RADAR_DRAWING),
-  Pos = reclip(X, Y, wxPanel:getSize(State#state.canvas)),
-  NewRadars = Radars#{X => #radar_info{pos = Pos, bitmap = Bmp}},
-  {noreply, State#state{radars = NewRadars}, {continue, [inc_radars, redraw_stat_bar]}};
-
 handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
-  Prev = State#state.click_info#click_info.key,
   case find_object(reclip(X, Y, wxPanel:getSize(State#state.canvas)), State#state.radars) of
     none ->
       PickedRadars = case sets:is_empty(State#state.click_info#click_info.selected) of
@@ -334,12 +324,6 @@ handle_event(#wx{event = #wxMouse{type=right_down, x=X, y=Y}}, State) ->
                          _ -> ok
                        end
                    end, PickedRadars),
-      {noreply, State};
-    {Prev, _} ->
-      spawn(fun() ->
-        gen_server:cast({global, ?SERVER}, {Prev,
-                                               [{ultrasonic, 0, 150}, {ultrasonic, 45, 150}, {ultrasonic, 90, 150}]
-                                              }) end),
       {noreply, State};
     {SelectionKey, Object} ->
       Env = wx:get_env(),
