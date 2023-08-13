@@ -32,8 +32,8 @@
 
 -define(HIGHPROB, 0.8).
 
--record(data, {file, operator_port, inotify_ref,
-               curr_file = <<>>, file_replace = 0, files = {<<>>, <<>>, <<>>},
+-record(data, {file, operator_port, inotify_ref, tick,
+               curr_file = <<>>, file_replace = 0, files = {<<>>, <<>>, <<>>}, file_data,
                intensity = ?LOWPROB, angle = 0, ldr_r = 50, ldr_v = 10, us_r = 450, us_v = 10
               }).
 
@@ -91,9 +91,9 @@ init(Args) ->
       OperatorPort = proplists:get_value(operator, Args, operator),
       Ref = inotify:watch(PortFile, [delete_self]),
       inotify:add_handler(Ref, ?MODULE, self()),
-      timer:send_interval(100, advance),
+      {ok, Tref} = timer:send_interval(100, advance),
       timer:send_interval(1000, update_randomness),
-      {ok, idle, #data{file = PortFile, operator_port = OperatorPort, inotify_ref = Ref}}
+      {ok, idle, #data{file = PortFile, operator_port = OperatorPort, inotify_ref = Ref, tick = Tref}}
   end.
 
 %%--------------------------------------------------------------------
@@ -141,17 +141,17 @@ handle_event(cast, {send, telemeter, Angle}, _State, Data) ->
   {next_state, telemeter, Data#data{angle = Angle}};
 
 handle_event(cast, {send, ?FILE_0_CMD, []}, _State, #data{files = {File, _, _}} = Data) ->
-  {next_state, do_file, Data#data{angle = 0, curr_file = File}};
+  {next_state, do_file, Data#data{file_data = first, curr_file = File}};
 
 handle_event(cast, {send, ?FILE_1_CMD, []}, _State, #data{files = {_, File, _}} = Data) ->
-  {next_state, do_file, Data#data{angle = 0, curr_file = File}};
+  {next_state, do_file, Data#data{file_data = first, curr_file = File}};
 
 handle_event(cast, {send, ?FILE_2_CMD, []}, _State, #data{files = {_, _, File}} = Data) ->
-  {next_state, do_file, Data#data{angle = 0, curr_file = File}};
+  {next_state, do_file, Data#data{file_data = first, curr_file = File}};
 
 handle_event(cast, {send, file, ParsedFile}, _State,
               #data{file_replace = FileReplace, files = Files} = Data) ->
-  {next_state, idle, Data#data{files = setelement(FileReplace, Files, ParsedFile),
+  {next_state, idle, Data#data{files = setelement(FileReplace+1, Files, ParsedFile),
                                file_replace = (FileReplace + 1) rem 3}};
 
 handle_event(info, advance, idle, _Data) ->
@@ -212,9 +212,123 @@ handle_event(info, advance, scan_both, #data{angle = Angle} = Data) ->
   %% update data angle
   {keep_state, Data#data{angle = (Angle + 3) rem 180}};
 
-handle_event(info, advance, do_file, Data) ->
-  %% update data angle
-  {keep_state, Data}.
+handle_event(info, advance, do_file, #data{tick = OldTref, curr_file = <<>>} = Data) ->
+  timer:cancel(OldTref),
+  {ok, NewTref} = timer:send_interval(100, advance),
+  {next_state, idle, Data#data{tick = NewTref}};
+
+handle_event(info, advance, do_file, #data{curr_file = <<Opcode:8, _Arg:8, Rest/binary>>} = Data)
+                                          when Opcode == 16#01 orelse
+                                               Opcode == 16#02 orelse
+                                               Opcode == 16#03 ->
+  {keep_state, Data#data{curr_file = Rest, file_data = first}};
+
+handle_event(info, advance, do_file, #data{curr_file = <<16#05:8, Rest/binary>>} = Data) ->
+  {keep_state, Data#data{curr_file = Rest, file_data = first}};
+
+handle_event(info, advance, do_file, #data{tick = OldTref, curr_file = <<16#04:8, D:8, Rest/binary>>} = Data) ->
+  timer:cancel(OldTref),
+  {ok, NewTref} = timer:send_interval(D, advance),
+  {keep_state, Data#data{curr_file = Rest, tick = NewTref, file_data = first}};
+
+handle_event(info, advance, do_file, #data{tick = OldTref, curr_file = <<16#08:8, _Rest/binary>>} = Data) ->
+  timer:cancel(OldTref),
+  {ok, NewTref} = timer:send_interval(100, advance),
+  {next_state, idle, Data#data{tick = NewTref}};
+
+handle_event(info, advance, do_file, #data{file_data = first, curr_file = <<16#09:8, D:8, _Rest/binary>>} = Data) ->
+  {keep_state, Data#data{file_data = 0, angle = D * 3}};
+
+handle_event(info, advance, do_file, #data{file_data = first, curr_file = <<16#06:8, D:8, _Rest/binary>>} = Data) ->
+  {keep_state, Data#data{file_data = 0, angle = D * 3}};
+
+handle_event(info, advance, do_file, #data{curr_file = <<16#06:8, _D:8, Rest/binary>>} = Data) ->
+  case generate_random_sample(us, Data) of
+    no_sample -> ok;
+    Sample_US ->
+      gen_server:cast(Data#data.operator_port, {ultrasonic, self(), Sample_US})
+  end,
+  case Data#data.file_data of
+    9 -> {keep_state, Data#data{file_data = first, curr_file = Rest}};
+    Val -> {keep_state, Data#data{file_data = Val + 1}}
+  end;
+
+handle_event(info, advance, do_file, #data{curr_file = <<16#09:8, _D:8, Rest/binary>>} = Data) ->
+  case generate_random_sample(ldr, Data) of
+    no_sample -> ok;
+    Sample_LDR ->
+      gen_server:cast(Data#data.operator_port, {ldr, self(), Sample_LDR})
+  end,
+  case Data#data.file_data of
+    9 -> {keep_state, Data#data{file_data = first, curr_file = Rest}};
+    Val -> {keep_state, Data#data{file_data = Val + 1}}
+  end;
+
+handle_event(info, advance, do_file, #data{file_data = first, curr_file = <<16#0B:8, D:8, _Rest/binary>>} = Data) ->
+  {keep_state, Data#data{file_data = 0, angle = D * 3}};
+
+handle_event(info, advance, do_file, #data{curr_file = <<16#0B:8, _D:8, Rest/binary>>} = Data) ->
+  case generate_random_sample(us, Data) of
+    no_sample -> ok;
+    Sample_US ->
+      gen_server:cast(Data#data.operator_port, {ultrasonic, self(), Sample_US})
+  end,
+  case generate_random_sample(ldr, Data) of
+    no_sample -> ok;
+    Sample_LDR ->
+      gen_server:cast(Data#data.operator_port, {ldr, self(), Sample_LDR})
+  end,
+  case Data#data.file_data of
+    9 -> {keep_state, Data#data{file_data = first, curr_file = Rest}};
+    Val -> {keep_state, Data#data{file_data = Val + 1}}
+  end;
+
+handle_event(info, advance, do_file, #data{file_data = first, curr_file = <<16#07:8, Min:8, Max:8, _Rest/binary>>} = Data) ->
+  {keep_state, Data#data{file_data = Max * 3, angle = Min * 3}};
+
+handle_event(info, advance, do_file, #data{file_data = RealMax, curr_file = <<16#07:8, _Min:8, _Max:8, Rest/binary>>} = Data) ->
+  case generate_random_sample(us, Data) of
+    no_sample -> ok;
+    Sample_US ->
+      gen_server:cast(Data#data.operator_port, {ultrasonic, self(), Sample_US})
+  end,
+  case Data#data.angle of
+    Angle when Angle >= RealMax -> {keep_state, Data#data{curr_file = Rest, file_data = first}};
+    Angle -> {keep_state, Data#data{angle = Angle + 3}}
+  end;
+
+handle_event(info, advance, do_file, #data{file_data = first, curr_file = <<16#0A:8, Min:8, Max:8, _Rest/binary>>} = Data) ->
+  {keep_state, Data#data{file_data = Max * 3, angle = Min * 3}};
+
+handle_event(info, advance, do_file, #data{angle = Angle, file_data = RealMax, curr_file = <<16#0A:8, _Min:8, _Max:8, Rest/binary>>} = Data) ->
+  case generate_random_sample(ldr, Data) of
+    no_sample -> ok;
+    Sample_LDR ->
+      gen_server:cast(Data#data.operator_port, {ldr, self(), Sample_LDR})
+  end,
+  case Angle of
+    _ when Angle >= RealMax -> {keep_state, Data#data{curr_file = Rest, file_data = first}};
+    _ -> {keep_state, Data#data{angle = Angle + 3}}
+  end;
+
+handle_event(info, advance, do_file, #data{file_data = first, curr_file = <<16#0C:8, Min:8, Max:8, _Rest/binary>>} = Data) ->
+  {keep_state, Data#data{file_data = Max * 3, angle = Min * 3}};
+
+handle_event(info, advance, do_file, #data{angle = Angle, file_data = RealMax, curr_file = <<16#0C:8, _Min:8, _Max:8, Rest/binary>>} = Data) ->
+  case generate_random_sample(us, Data) of
+    no_sample -> ok;
+    Sample_US ->
+      gen_server:cast(Data#data.operator_port, {ultrasonic, self(), Sample_US})
+  end,
+  case generate_random_sample(ldr, Data) of
+    no_sample -> ok;
+    Sample_LDR ->
+      gen_server:cast(Data#data.operator_port, {ldr, self(), Sample_LDR})
+  end,
+  case Angle of
+    _ when Angle >= RealMax -> {keep_state, Data#data{curr_file = Rest, file_data = first}};
+    _ -> {keep_state, Data#data{angle = Angle + 3}}
+  end.
 
 inotify_event(Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
   gen_statem:cast(Arg, {inotify, Arg, EventTag, Masks, Filename}).
