@@ -125,34 +125,22 @@ handle_event(cast, {inotify, _Arg, _EventTag, _Masks, _Filename}, _State, Data) 
   inotify:unwatch(Data#data.inotify_ref),
   {stop, normal};
 
-handle_event(cast, {send, ?IDLE_CMD, []}, _State, Data) ->
-  {next_state, idle, Data#data{angle = 0}};
-
-handle_event(cast, {send, ?SONIC_D_CMD, []}, _State, Data) ->
-  {next_state, scan_us, Data#data{angle = 0}};
-
-handle_event(cast, {send, ?LDR_D_CMD, []}, _State, Data) ->
-  {next_state, scan_ldr, Data#data{angle = 0}};
-
-handle_event(cast, {send, ?DUAL_D_CMD, []}, _State, Data) ->
-  {next_state, scan_both, Data#data{angle = 0}};
-
-handle_event(cast, {send, telemeter, Angle}, _State, Data) ->
-  {next_state, telemeter, Data#data{angle = Angle}};
-
-handle_event(cast, {send, ?FILE_0_CMD, []}, _State, #data{files = {File, _, _}} = Data) ->
-  {next_state, do_file, Data#data{file_data = first, curr_file = File}};
-
-handle_event(cast, {send, ?FILE_1_CMD, []}, _State, #data{files = {_, File, _}} = Data) ->
-  {next_state, do_file, Data#data{file_data = first, curr_file = File}};
-
-handle_event(cast, {send, ?FILE_2_CMD, []}, _State, #data{files = {_, _, File}} = Data) ->
-  {next_state, do_file, Data#data{file_data = first, curr_file = File}};
-
-handle_event(cast, {send, file, ParsedFile}, _State,
-              #data{file_replace = FileReplace, files = Files} = Data) ->
-  {next_state, idle, Data#data{files = setelement(FileReplace+1, Files, ParsedFile),
-                               file_replace = (FileReplace + 1) rem 3}};
+handle_event(cast, {send, Cmd, Arg}, _State, #data{tick = OldTref, files = {File0, File1, File2} = Files, file_replace = FileReplace} = OldData) ->
+  timer:cancel(OldTref),
+  {ok, NewTref} = timer:send_interval(100, advance),
+  Data = OldData#data{tick = NewTref},
+  case {Cmd, Arg} of
+    {?IDLE_CMD, []} -> {next_state, idle, Data#data{angle = 0}};
+    {?SONIC_D_CMD, []} -> {next_state, scan_us, Data#data{angle = 0}};
+    {?LDR_D_CMD, []} -> {next_state, scan_ldr, Data#data{angle = 0}};
+    {?DUAL_D_CMD, []} -> {next_state, scan_both, Data#data{angle = 0}};
+    {telemeter, Angle} -> {next_state, telemeter, Data#data{angle = Angle}};
+    {?FILE_0_CMD, []} -> {next_state, do_file, Data#data{file_data = first, curr_file = File0}};
+    {?FILE_1_CMD, []} -> {next_state, do_file, Data#data{file_data = first, curr_file = File1}};
+    {?FILE_2_CMD, []} -> {next_state, do_file, Data#data{file_data = first, curr_file = File2}};
+    {file, ParsedFile} -> {next_state, idle, Data#data{files = setelement(FileReplace+1, Files, ParsedFile),
+                               file_replace = (FileReplace + 1) rem 3}}
+  end;
 
 handle_event(info, advance, idle, _Data) ->
   keep_state_and_data;
@@ -212,6 +200,7 @@ handle_event(info, advance, scan_both, #data{angle = Angle} = Data) ->
   %% update data angle
   {keep_state, Data#data{angle = (Angle + 3) rem 180}};
 
+%% do_file state
 handle_event(info, advance, do_file, #data{tick = OldTref, curr_file = <<>>} = Data) ->
   timer:cancel(OldTref),
   {ok, NewTref} = timer:send_interval(100, advance),
