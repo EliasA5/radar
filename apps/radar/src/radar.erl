@@ -40,7 +40,8 @@
           radar_backup,
           noti_box,
           chosen_file = {"~", ""},
-          us_max_min = {2, 450}
+          us_max_min = {2, 450},
+          draw_samples = true
 }).
 
 -record(click_info, {
@@ -753,6 +754,18 @@ handle_continue(Continue, State) ->
 
 %% [{ldr, Angle, Distance}]
 %% [{ultrasonic, Angle, Distance}]
+do_cont(redraw, #state{draw_samples = false} = State) ->
+  TimeNow = erlang:monotonic_time(millisecond),
+  NewRadars = maps:map(fun(_Key, #radar_info{samples = Samples} = RadarInfo) ->
+               NewSamples = lists:filter(fun
+                              ({_, Time, _, _}) when TimeNow - Time > 3000 -> false;
+                              (_) -> true
+                            end, Samples),
+               RadarInfo#radar_info{samples = NewSamples}
+           end, State#state.radars),
+  {ok, _RedrawTRef} = timer:send_after(20, redraw),
+  State#state{radars = NewRadars};
+
 do_cont(redraw, #state{background = {BackgroundBitmap, _},
                              click_info = #click_info{selected = Selected}} = State) ->
   {W, H} = wxPanel:getSize(State#state.canvas),
