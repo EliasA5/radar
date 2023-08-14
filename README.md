@@ -53,12 +53,12 @@ for the workers/operators:
 
     ERL_FLAGS='-config config/sys.config' RADAR_NODE=radar@<ip> rebar3 shell --apps operator --name <oprator_name>@<ip> --setcookie <cookie>
 
-To generate new imaginary radars, we create a new directory called ”dev/” inside the project root directory (created auto-
-matically after starting the operator), and inside it we create new files with the names ”radar [0-9a-z]+”, and to remove the
+To generate new imaginary radars, we create a new directory called ”dev/” inside the project root directory (created automatically after starting the operator), and inside it we create new files with the names ”radar_[0-9a-zA-Z]+”, and to remove the
 radar we simply delete it’s file from this directory, for example:
 ```bash
 .../radar> cd dev
 .../radar/dev> touch radar_12hi # creates a new radar
+.../radar/dev> touch radar_{000..100} # creates 101 new radars
 .../radar/dev> rm radar_12hi # remove the radar
 .../radar/dev> rm radar_* # remove all radars
 ```
