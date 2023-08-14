@@ -655,7 +655,7 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
-handle_cast({Pid, Samples}, #state{us_max_min = {Min, Max}} = State) when (is_pid(Pid) orelse is_integer(Pid)) andalso is_list(Samples) ->
+handle_cast({Pid, Samples}, #state{us_max_min = {Min, Max}} = State) when is_pid(Pid) andalso is_list(Samples) ->
   try maps:update_with(Pid, fun(#radar_info{samples = OldSamples} = RadarInfo) ->
                             SamplesTime = lists:filtermap(
                                             fun
