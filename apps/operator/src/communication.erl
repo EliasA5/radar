@@ -137,6 +137,8 @@ idle(_Type, _Msg, _Data) ->
               Data :: term()) ->
   gen_statem:event_handler_result(atom()).
 
+% postpone messages from MSP and cmds from operator until ack arrives, or we timeout
+% when sending file we send byte byte and wait for ack each time
 rec_ack(info, {data, _Byte}, #data{postpones = Postpones} = Data) when Postpones =/= 0 ->
   {next_state, rec_ack, Data#data{postpones = Postpones-1}, postpone};
 rec_ack(info, {data, <<?MSPPC_ULTRASONIC:2, _Ack:6>>}, Data) ->
@@ -178,6 +180,9 @@ rec_ack(_Type, _Msg, _Data) ->
           Msg :: term(),
           Data :: term()) ->
   gen_statem:event_handler_result(atom()).
+
+% depending on receive type (set from idle state) recieve specific amount of bytes,
+% then call formatter and send result to operator.
 rec(info, {data, Byte}, #data{rec_type = ultrasonic, rec_amount = 1} = Data) ->
   % send data to upper layer, goto idle
   RecBuf = <<(Data#data.rec_buf)/binary, Byte/binary>>,

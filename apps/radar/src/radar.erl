@@ -485,6 +485,8 @@ handle_event(#wx{id=?STELEM_BUTTON, event=#wxCommand{type=command_button_clicked
         end),
   {noreply, State};
 
+% this was fun to do
+% use callbacks to open more dialogs
 handle_event(#wx{id=?US_DISTANCE, event=#wxCommand{type=command_button_clicked}},
              #state{frame = _Frame, us_max_min = {Min, Max}} = State) ->
   Env = wx:get_env(),
@@ -570,6 +572,8 @@ handle_call({disconnect_radar, _Node, Info}, _From,
       {reply, ok, State, {continue, inc_msg}}
   end;
 
+% delete all radars belonging to the operator,
+% operator himself is responsible to connect each radar later.
 handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = State) ->
   NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
                               case INode of
@@ -590,6 +594,7 @@ handle_call({reconnect_operator, Node}, _From, #state{click_info = ClickInfo} = 
                           click_info = ClickInfo#click_info{selected = NewSelected}
                          }, {continue, [{log, "Operator ~p reconnected~n", [Node]}, set_radar_nums, inc_msg, redraw_stat_bar]}};
 
+% callbacks from dialogs go to handle_call
 handle_call({update_angle, Key, Angle}, _From, State) ->
   try maps:update_with(Key,
                        fun(Info) ->
@@ -655,6 +660,9 @@ handle_call(_Request, _From, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: term(), NewState :: term()}.
 
+% concepually here we can easily add a function that proccesses the samples and does something
+% interesting with them (for example tracking).
+% we would call it on NewSamples and it would return something for the gui to draw.
 handle_cast({Pid, Samples}, #state{us_max_min = {Min, Max}} = State) when is_pid(Pid) andalso is_list(Samples) ->
   try maps:update_with(Pid, fun(#radar_info{samples = OldSamples} = RadarInfo) ->
                             SamplesTime = lists:filtermap(
@@ -690,9 +698,11 @@ handle_cast(_Request, State) ->
   {noreply, NewState :: term(), hibernate} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
+% generated from timer:send_after 20 ms after finishing drawing frame
 handle_info(redraw, State) ->
   {noreply, State, {continue, redraw}};
 
+% generated from timer:send_interval each second to update the status bar timer
 handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = Stats} = State) ->
   Uptime = ets:update_counter(Stats, uptime, 1),
   {_Days, {Hours, Minutes, Seconds}} = calendar:seconds_to_daystime(Uptime),
@@ -700,9 +710,11 @@ handle_info({advance_uptime}, #state{status_bar = StatusBar, status_bar_stats = 
   wxStatusBar:setStatusText(StatusBar, "Uptime: " ++ UptimeStr, [{number, 0}]),
   {noreply, State, {continue, [set_detections, redraw_detections_bar]}};
 
+% redirect all wx events to handle_event
 handle_info(#wx{} = WxEvent, State) ->
   handle_event(WxEvent, State);
 
+% some operator fell, remove all it's radars, decrement the number of connected nodes
 handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
   NewRadars = maps:filter(fun(_Key, #radar_info{name = Name, bitmap = Bitmap, node = INode} = RadarInfo) ->
                               case INode of
@@ -724,8 +736,9 @@ handle_info({nodedown, Node}, #state{click_info = ClickInfo} = State) ->
             {continue, [inc_msg, set_radar_nums, dec_nodes, redraw_stat_bar,
                          {log,  "node ~p disconnected~n", [Node]}]}};
 
+% some operator connected, inc the number of connected nodes
 handle_info({nodeup, Node}, State) ->
-  {noreply, State, {continue, [inc_nodes, redraw_stat_bar, {log,  "new node connected ~p~n", [Node]}]}};
+  {noreply, State, {continue, [inc_nodes, redraw_stat_bar, {log, "new node connected ~p~n", [Node]}]}};
 
 handle_info(_Info, State) ->
   io:format("got unknown info: ~p~n", [_Info]),
@@ -745,6 +758,9 @@ handle_info(_Info, State) ->
   {noreply, NewState :: term(), {continue, Continue :: term()}} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
+% do_cont should mutate the state and return it
+% can also do side effects such as updating ets, redrawing on canvas
+% anything we can imagine
 handle_continue(Continue, State) when is_list(Continue) ->
   NewState = lists:foldl(fun do_cont/2, State, Continue),
   {noreply, NewState};
@@ -754,6 +770,7 @@ handle_continue(Continue, State) ->
 
 %% [{ldr, Angle, Distance}]
 %% [{ultrasonic, Angle, Distance}]
+% non graphical mode, only filter the samples
 do_cont(redraw, #state{draw_samples = false} = State) ->
   TimeNow = erlang:monotonic_time(millisecond),
   NewRadars = maps:map(fun(_Key, #radar_info{samples = Samples} = RadarInfo) ->
@@ -766,6 +783,7 @@ do_cont(redraw, #state{draw_samples = false} = State) ->
   {ok, _RedrawTRef} = timer:send_after(20, redraw),
   State#state{radars = NewRadars};
 
+% main graphical function, draws everything
 do_cont(redraw, #state{background = {BackgroundBitmap, _},
                              click_info = #click_info{selected = Selected}} = State) ->
   {W, H} = wxPanel:getSize(State#state.canvas),
@@ -819,6 +837,7 @@ do_cont(redraw_background, #state{background = {BackgroundBitmap, _}} = State) -
   wxBitmap:destroy(Bitmap),
   State;
 
+% open shapes folder from the change background button ;)
 do_cont({easter_egg, Path}, State) ->
   Args = [{access, read}, {file, Path}, {type, set}, {repair, false}],
   case dets:open_file(shape, Args) of
@@ -880,6 +899,7 @@ do_cont(set_detections, State) ->
 -spec terminate(Reason :: normal | shutdown | {shutdown, term()} | term(),
                 State :: term()) -> any().
 
+% close dets correctly, write from log box to output file.
 terminate(_Reason, State) ->
   append_textbox(State#state.noti_box, "~s, radar app exiting~n", [get_current_time_str(calendar)]),
   Data = wxTextCtrl:getValue(State#state.noti_box),
@@ -927,11 +947,19 @@ format_status(_Opt, Status) ->
 %%% Internal functions
 %%%===================================================================
 
+%% all dialogs are made by first getting the wx enviroment, spawning a new process
+%% that calls the dialog functions.
+%% else we will block the gen_server from proccessing events until the user exits
+%% the dialog, additionaly this blocks interacting with the background window,
+%% so we can have at most 1 dialog.
+
 -spec slider_dialog(Env :: any(),
                     Pos :: {Low :: integer(), High :: integer(), Def :: integer()},
                     Callback :: fun((integer()) -> any()),
                     Title :: string()) -> ok.
 
+% slider dialog, can set low, high and default value
+% Callback gets called on the user selected number
 slider_dialog(Env, {Low, High, Def}, Callback, Title) ->
   wx:set_env(Env),
   SliderDialog = wxDialog:new(wx:null(), ?wxID_ANY, Title,
@@ -972,6 +1000,7 @@ slider_dialog(Env, {Low, High, Def}, Callback, Title) ->
 -spec error_dialog(Env :: any(), Title :: string(), ErrorMessage :: string()) ->
    ok.
 
+% shows an error dialog with the error msg
 error_dialog(Env, Title, ErrorMessage) ->
   wx:set_env(Env),
   ErrorDialog = wxMessageDialog:new(wx:null(), ErrorMessage,
@@ -987,6 +1016,8 @@ error_dialog(Env, Title, ErrorMessage) ->
                        DefaultDir :: string(),
                        DefaultFile :: string()) -> ok.
 
+% shows a file picker dialog, calls Callback with the selected directory
+% we can also supply the default dir and file
 file_dialog(Env, Callback, Title, DefaultDir, DefaultFile) ->
   wx:set_env(Env),
   FileDialog = wxFileDialog:new(wx:null(),
@@ -1006,6 +1037,7 @@ file_dialog(Env, Callback, Title, DefaultDir, DefaultFile) ->
   wxFileDialog:destroy(FileDialog),
   ok.
 
+% shows the stats
 stats_dialog(Env, Stats) ->
   wx:set_env(Env),
   StatsDialog = wxDialog:new(wx:null(), ?wxID_ANY, "Stats Report", [
@@ -1063,6 +1095,7 @@ stats_dialog(Env, Stats) ->
 %%% Auxilary Internal functions
 %%%===================================================================
 
+% get first object
 find_object({_X, _Y} = Pos, Objects) ->
   get_first_pred(fun(_Key, Object) -> is_in_box(Pos, Object#radar_info.pos) end, Objects).
 
@@ -1089,10 +1122,12 @@ is_in_box({X, Y} = _Actual, {X0, Y0} = _Pos) ->
       false
   end.
 
+% regular (non-selected radar)
 draw_radar_on_dc(_Key, #radar_info{pos = Pos, bitmap = Bmp}, false, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
   ok;
 
+% selected radar, draw some text with it's info
 draw_radar_on_dc(_Key, #radar_info{pos = {X, Y} = Pos, angle = Angle,
                                    bitmap = Bmp, node = Node, name = Name}, true, DC) ->
   wxDC:drawBitmap(DC, Bmp, Pos),
@@ -1118,6 +1153,7 @@ draw_sample({SampleType, SampleTime, Angle, Dist}, {X, Y}, TimeNow, RadarAngle, 
   TimeDiff = 4 - ((TimeNow - SampleTime) div 1000),
   wxDC:drawCircle(DC, Goal, 2*TimeDiff).
 
+% draws radar and its samples, additionaly filters samples older than 3000 ms.
 draw_radar(_Key, #radar_info{pos = Pos, samples = Samples, angle = RadarAngle} = RadarInfo, TimeNow, Selected, DC) ->
   draw_radar_on_dc(_Key, RadarInfo, sets:is_element(_Key, Selected), DC),
   NewSamples = lists:filter(fun
@@ -1126,6 +1162,8 @@ draw_radar(_Key, #radar_info{pos = Pos, samples = Samples, angle = RadarAngle} =
                             end, Samples),
   RadarInfo#radar_info{samples = NewSamples}.
 
+% use memorydc as a buffer, then copy it onto the canvas
+% this protects from flickering
 draw(Canvas, Bitmap, Fun) ->
   MemoryDC = wxMemoryDC:new(Bitmap),
   CDC = wxPaintDC:new(Canvas),
@@ -1139,6 +1177,7 @@ draw(Canvas, Bitmap, Fun) ->
   wxMemoryDC:destroy(MemoryDC),
   Ret.
 
+% get bitmaps for different objects, such as regular/selected radar or background
 get_image_bitmap(Path) ->
   get_image_bitmap(Path, 0).
 
@@ -1163,12 +1202,16 @@ update_angle(Key, Angle) ->
 send_telemeter(Angle) ->
   gen_server:call({global, ?SERVER}, {send_telemeter, Angle}).
 
+% clip radar back into canvas
 reclip(X, Y, {W, H}) ->
   F = fun(N, Min, Max) ->
         max(Min, min(N, Max))
       end,
   {F(X, 0, W) - ?BITMAP_WIDTH, F(Y, 0, H) - ?BITMAP_HEIGHT}.
 
+% try to parse and send the file
+% if it fails for any reason throw an error dialog
+% also send path and name for updating the state (default dir and file)
 parse_and_send_file(Path) ->
   try radar_parser:parse_file(Path) of
     ParsedFile ->
@@ -1199,9 +1242,12 @@ append_textbox(TextCtrl, Str, Args)->
   wxTextCtrl:appendText(TextCtrl, io_lib:format("~s: " ++ Str, [TimeStr | Args])),
   ok.
 
+% returns 0-180 if infront of the radar
+% 180-360 if behind
 find_angle(#radar_info{pos = {X0, Y0}, angle = Angle}, {X1, Y1}) ->
   round((math:atan2(Y1 - Y0 - ?BITMAP_HEIGHT, X1 - X0 - ?BITMAP_WIDTH) * 180 / math:pi()) + 180 - Angle) rem 360.
 
+% easter egg
 update_state_from_dets(Dets, State) ->
   NewRadars = maps:map(fun
                          (_, #radar_info{name = Name} = RadarInfo) ->
@@ -1213,5 +1259,4 @@ update_state_from_dets(Dets, State) ->
                            end
                        end, State#state.radars),
   State#state{radars = NewRadars}.
-
 

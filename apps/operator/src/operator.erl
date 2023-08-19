@@ -133,6 +133,9 @@ set_send_rate(Cache, Time) ->
                               {ok, State :: term(), hibernate} |
                               {stop, Reason :: term()} |
                               ignore.
+%% devices exist on /dev/serial/by-id directory
+%% if directory doesn't exist, watch /dev for creation of serial dir
+%% if all devices disconnect also watch the /dev directory
 init([]) ->
   process_flag(trap_exit, true),
   net_kernel:monitor_nodes(true),
@@ -159,6 +162,8 @@ init_serial() ->
   inotify:add_handler(Ref, ?SERVER, ser),
   {CommMap, Ref}.
 
+% dev/ directory is in the top level directory of the project
+% and has the imaginary radars
 init_img() ->
   case filelib:ensure_dir("dev/") of
     {error, _Err} -> {#{}, make_ref()};
@@ -223,6 +228,7 @@ handle_call(_Request, _From, State) ->
   {stop, Reason :: term(), NewState :: term()}.
 
 %% From Communication Ports
+% new sample
 handle_cast({Type, Cid, {Angle, Distance}} = _SampleUS, #state{cache = false} = State) ->
   gen_server:cast({global, radar}, {Cid, [{Type, Angle, Distance}]}),
   {noreply, State};
@@ -239,6 +245,7 @@ handle_cast({Type, Cid, {Angle, Distance}} = _SampleUS, #state{cache = true} = S
     _Err:{badkey, _} -> {noreply, State}
   end;
 
+% new ack
 handle_cast({ack, Cid, _Ack}, #state{comm_map = CommMap} = State) ->
   %% should never fail
   NewCommMap = maps:update_with(Cid, fun(#comm_info{acks = Acks} = Info) ->
@@ -247,6 +254,7 @@ handle_cast({ack, Cid, _Ack}, #state{comm_map = CommMap} = State) ->
                                 CommMap),
   {noreply, State#state{comm_map = NewCommMap}};
 
+% got wrong ack
 handle_cast({wrong_ack, Cid, _Ack1, _Ack2}, #state{comm_map = CommMap} = State) ->
   %% should never fail
   NewCommMap = maps:update_with(Cid, fun(#comm_info{nacks = Nacks} = Info) ->
@@ -255,7 +263,7 @@ handle_cast({wrong_ack, Cid, _Ack1, _Ack2}, #state{comm_map = CommMap} = State) 
                                 CommMap),
   {noreply, State#state{comm_map = NewCommMap}};
 
-%% To communication ports
+%% To communication ports, commands
 handle_cast({go_idle, Whom}, State) ->
   Msg = {send, ?IDLE_CMD, []},
   cast_msg(Whom, Msg, State#state.comm_map),
@@ -291,6 +299,7 @@ handle_cast({send_file, Whom, ParsedFile}, State) ->
   {noreply, State};
 
 %% to GUI
+% new radar connected
 handle_cast({inotify, ser, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
   case get_comm(Name) of
     {true, {Cid, CommInfo}} ->
@@ -300,6 +309,7 @@ handle_cast({inotify, ser, _EventTag, _Masks, Name}, #state{comm_map = CommMap} 
       {noreply, State}
   end;
 
+% first real radar connected, /dev/serial/by-id dirctory now exits, watch it
 handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = OldRef} = State) ->
   CommMap = get_all_comms(),
   inotify:unwatch(OldRef),
@@ -308,6 +318,7 @@ handle_cast({inotify, dev, _EventTag, _Masks, "serial"}, #state{inotify_ref = Ol
   {noreply, State#state{comm_map = CommMap, inotify_ref = Ref},
             {continue, {connect_radar, maps:to_list(CommMap)}}};
 
+% imaginary radar connected
 handle_cast({inotify, img, _EventTag, _Masks, Name}, #state{comm_map = CommMap} = State) ->
   case get_img_comm(Name) of
     {true, {Cid, CommInfo}} ->
@@ -350,6 +361,7 @@ handle_info(send_samples, #state{cache = true} = State) ->
            end, State#state.comm_map),
   {noreply, State#state{comm_map = NewCommMap}};
 
+% some radar disconnected (real or imaginary), deal with it accordingly
 handle_info({'EXIT', Pid, _Reason}, #state{comm_map = CommMap, inotify_ref = OldRef} = State) ->
   case maps:take(Pid, CommMap) of
     {#comm_info{type = msp} = Info, NewMap} ->
@@ -372,9 +384,11 @@ handle_info({'EXIT', Pid, _Reason}, #state{comm_map = CommMap, inotify_ref = Old
       {noreply, State}
   end;
 
+% the gui went down
 handle_info({nodedown, RadarNode}, #state{radar_node = RadarNode} = State) ->
   {noreply, State#state{radar_node = nonode@nohost, last_radar_node = RadarNode}};
 
+% gui went up
 handle_info({nodeup, RadarNode}, #state{last_radar_node = RadarNode} = State) ->
   {noreply, State#state{radar_node = RadarNode}, {continue, reconnect}};
 
@@ -390,6 +404,7 @@ handle_info(_Info, State) ->
   {noreply, NewState :: term(), {continue, Continue :: term()}} |
   {stop, Reason :: normal | term(), NewState :: term()}.
 
+% not connected, don't try to do anything
 handle_continue(_Continue, #state{radar_node = nonode@nohost} = State) ->
   {noreply, State};
 
@@ -435,6 +450,7 @@ handle_continue(_Continue, State) ->
 -spec inotify_event(Arg :: term(), EventTag :: reference(), MsgContents :: '?inotify_msg') ->
   ok.
 
+% inotify gen_event calls this, Arg is supplied by us
 inotify_event(Arg, EventTag, ?inotify_msg(Masks, _Cookie, Filename)) ->
   gen_server:cast(?SERVER, {inotify, Arg, EventTag, Masks, Filename}).
 
