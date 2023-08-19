@@ -24,7 +24,7 @@ Downloading on the MSP
 Pin Connections
 -----
 
-P1.3 (A3), P1.0 (A0) analog inputs from LDR
-P2.0 (TA1.0) trigger, P2.2 (TA1.1) pwm, P2.4 (TA1.2) Echo for ultrasonic sensor
-LCD Ctl Pins P2.5 P2.6 P2.7
-LCD Data P1.4 - P1.7
+  - P1.3 (A3), P1.0 (A0) analog inputs from LDR
+  - P2.0 (TA1.0) trigger, P2.2 (TA1.1) pwm, P2.4 (TA1.2) Echo for ultrasonic sensor
+  - LCD Ctl Pins P2.5 P2.6 P2.7
+  - LCD Data P1.4 - P1.7
