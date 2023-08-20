@@ -1,0 +1,148 @@
+%\documentclass[conference]{IEEEtran}
+%\documentclass[peerreview]{IEEEtran}
+\documentclass{article}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{ifthen}
+\input{myshorts}
+\usepackage{amsfonts,amsthm,amsmath,amssymb}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
+
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{graphicx,subcaption}
+\usepackage{caption}
+\usepackage{outlines}
+% \usepackage[noadjust]{cite}
+% \usepackage[ruled,vlined]{algorithm2e}
+% \usepackage[dvipsnames]{xcolor} %%
+\DeclareMathAlphabet{\pazocal}{OMS}{zplm}{m}{n}
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator{\EX}{\mathbb{E}}
+\newtheorem{Claim}{Claim}
+\newtheorem{prop}{Proposition}
+\newtheorem{Theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\usepackage{listings}
+\newcommand{\B}[1]{\textbf{#1}}
+
+% \renewcommand\thesection{\arabic{section}}
+% \renewcommand\thesubsection{\thesection.\arabic{subsection}}
+% \setcounter{section}{1}
+% \setcounter{subsection}{1}
+
+\usepackage{color} %red, green, blue, yellow, cyan, magenta, black, white
+\definecolor{mygreen}{RGB}{28,172,0} % color values Red, Green, Blue
+\definecolor{mylilas}{RGB}{170,55,241}
+
+\newcommand{\myfig}[4]{
+% #1 options
+% #2 name of file in figs folder
+% #3 caption
+% #4 label
+\begin{figure}[h]
+    \centering
+    \captionsetup{justification=centering}
+    \includegraphics[width=#1\columnwidth]{figs_spec/#2}
+    \caption{#3}
+    \label{fig:#4}
+\end{figure}
+}
+\newcommand{\reff}[1]{Fig. \ref{fig:#1}}
+\usepackage{cancel}
+
+
+\title{Project Specification}
+\author{Elias Assaf - 315284729\\
+        Ahmad Dawod - 212141188}
+\date{\today}
+\begin{document}
+
+\maketitle
+% \tableofcontents
+% \newpage
+% \begin{abstract}
+%     TODO: abstract
+% \end{abstract}
+% \begin{IEEEkeywords}
+%     TODO: keywords
+% \end{IEEEkeywords}
+ %\myfig{size [01]}{filename.png}{caption}{label for later reference}
+\section{Messages}
+\subsection{PC (Communication) to MSP430}
+$<<$ID:2, Opcode:6$>>$\\
+ID can be:
+\begin{itemize}
+    \item 0:\\
+    Opcode is the operation code (state).
+    \item 1:\\
+    Next state is telemeter, Opcode $\in \{0,...,60\}$ is the angle/3.
+    \item 2:\\
+    Expect to receive a new file, Opcode is the length of the file in bytes, upto 60.
+\end{itemize}
+
+\subsection{MSP430 to PC (Communication)}
+$<<$Event\_Type:2, Degree:6$>>$\\
+\begin{itemize}
+    \item 1:\\
+    UltraSonic, Degree is the degree the source was detected, 2 bytes will follow echo high level time, which we compute the distance with.
+    \item 2:\\
+    LDR, Degree is the degree the souce was detected, 1 byte will follow which is the distance in cm.
+    \item 3:\\
+    Ack, Degree is the number of state received that we are acking.
+\end{itemize}
+
+\subsection{Communication to Operator}
+\begin{itemize}
+    \item cast, \{ultrasonic, \{Angle, Distance\}\}
+    \item cast, \{ldr, \{Angle, Distance\}\}
+    \item info, \{'DOWN', MonRef, process, Pid, Reason\}, Reason can be timeout of rec or rec\_ack, or normal.
+\end{itemize}
+
+\subsection{Operator to Communication}
+\begin{itemize}
+    \item cast, \{send, telemeter, Angle\}
+    \item cast, \{send, file, File\}
+    \item cast, \{send, Opcode, \_OpData\}, here Opcode is a number of the requested state, might change to be an atom and translate it into something the msp430 will understand.
+\end{itemize}
+
+\section{Input key value pairs}
+\subsection{communication.erl}
+\begin{itemize}
+    \item \{port\_file, Filename\}: required, filename of the port, for example "/dev/ttyACM0" or "COM8".
+    \item \{operator, Operator\}: for whom to send the received messages from msp430, a PID or a registered atom, default value is operator.
+    \item \{speed, Speed\}: speed of the communication, usually 9600.
+\end{itemize}
+\section{Config Pins.}
+P1.3 A3 + P1.0 A0 analog inputs from LDR\\
+P1.4 - P1.7 LCD \\
+P2.0 TA1.0 + P2.2 TA1.1( TA1.2 P2.4(Echo)\\
+LCD Pins P2.5 P2.6 P2.7\\
+Ultrasonic trigger P2.1\\
+\\
+\section{Timer responsibilities}
+\subsection{Timer A0}
+Pulse every 100 ms, activate relevant sensors based on state.\\
+Calculate degree of servo:\\
+\[SMCLK\, Frequency / 10000\,\,(0.1ms)\]
+\[\frac{2^{20}}{10000} = 104.8576(105)\]
+\[0.1ms = 105 \text{  cycles}\]
+$2.5ms$ for max degree 180 ,$0.6ms$ for degree 0, $1.9ms$ between 180 and 0.
+\[\frac{(104.8576 * 19)}{180} = 11\]
+We get 11 cycles per degree .\\
+Trigger ultrasonic for atleast 10 microseconds.\\
+Enable ADC10 sequence.\\
+
+\subsection{Timer A1}
+Use capture mode to get echo time of ultrasonic sensor.\\
+Use compare mode to control the servo motor.\\
+
+
+\end{document}

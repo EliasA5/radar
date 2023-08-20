@@ -1,0 +1,317 @@
+%\newcommand{\Jww}{J_{\underline{w} \hspace{0.3mm} \underline{w}}}
+%\newcommand{\Jbb}{J_{\underline{b} \hspace{0.3mm} \underline{b}}}
+%\newcommand{\Jtb}{J_{\theta \underline{b}}}
+%\newcommand{\Jbt}{J_{\underline{b} \theta }}
+%\newcommand{\Jwt}{J_{\underline{w} \theta}}
+%\newcommand{\Jtw}{J_{\theta \underline{w}}}
+%\newcommand{\fww}{f_{\underline{w} \hspace{0.3mm} \underline{w}}}
+%\newcommand{\fwt}{f_{\underline{w} \theta}}
+%\newcommand{\ftw}{f_{\theta \underline{w}}}
+%\newcommand{\ftt}{f_{\theta \theta}}
+%\newcommand{\Juu}{J_{\underline{u} \hspace{0.3mm} \underline{u}}}
+%\newcommand{\Jub}{J_{\underline{u} \hspace{0.3mm} \underline{b}}}
+%\newcommand{\Jbu}{J_{\underline{b} \hspace{0.3mm} \underline{u}}}
+\usepackage{ifthen}
+
+\newcommand{\thetaa}{ {\hat{\Theta}} }
+\newcommand\norm[1]{\left\lVert#1\right\rVert}
+% to use insert: \input{myshorts}
+\newcommand\mean[1]{{\mathop{\mathbb{E}}[#1]}}
+\newcommand{\Rvec}{{\bf{R}}}
+\newcommand{\Pvec}{{\bf{P}}}
+\newcommand{\Vvec}{{\bf{V}}}
+\newcommand{\Qvec}{{\bf{Q}}}
+\newcommand{\partialdir}[2]{{\frac{\partial #1}{\partial #2}}}
+
+\newcommand{\avec}{{\bf{a}}}
+\newcommand{\lvec}{{\bf{l}}}
+\newcommand{\bvec}{{\bf{b}}}
+\newcommand{\cvec}{{\bf{c}}}
+\newcommand{\dvec}{{\bf{d}}}
+\newcommand{\evec}{{\bf{e}}}
+\newcommand{\fvec}{{\bf{f}}}
+\newcommand{\epsvec}{{\bf{\epsilon}}}
+\newcommand{\pvec}{{\bf{p}}}
+\newcommand{\qvec}{{\bf{q}}}
+\newcommand{\Yvec}{{\bf{Y}}}
+\newcommand{\yvec}{{\bf{y}}}
+%\newcommand{\Yvec}{{\bf{y}}}
+\newcommand{\uvec}{{\bf{u}}}
+\newcommand{\wvec}{{\bf{w}}}
+\newcommand{\xvec}{{\bf{x}}}
+\newcommand{\Xvec}{{\bf{X}}}
+\newcommand{\Wvec}{{\bf{W}}}
+\newcommand{\zvec}{{\bf{z}}}
+\newcommand{\mvec}{{\bf{m}}}
+\newcommand{\nvec}{{\bf{n}}}
+\newcommand{\tvec}{{\bf{t}}}
+\newcommand{\rvec}{{\bf{r}}}
+\newcommand{\Svec}{{\bf{S}}}
+\newcommand{\Tvec}{{\bf{T}}}
+\newcommand{\svec}{{\bf{s}}}
+\newcommand{\vvec}{{\bf{v}}}
+\newcommand{\gvec}{{\bf{g}}}
+\newcommand{\gveca}{\gvec_{\alphavec}}
+\newcommand{\uveca}{\uvec_{\alphavec}}
+\newcommand{\hvec}{{\bf{h}}}
+\newcommand{\ivec}{{\bf{i}}}
+\newcommand{\kvec}{{\bf{k}}}
+\newcommand{\etavec}{{\bf{\eta}}}
+\newcommand{\zetavec}{{\text{\boldmath$\zeta$}}}
+\newcommand{\onevec}{{\bf{1}}}
+\newcommand{\zerovec}{{\bf{0}}}
+\newcommand{\ovec}{{\bf{o}}}
+\def\nuvec{{\mbox{\boldmath $\nu$}}}
+
+
+\newcommand{\thetavecGF}{{\tilde{\thetavec}}}
+\newcommand{\xvecGF}{{\tilde{\xvec}}}
+\newcommand{\wvecGF}{{\tilde{\wvec}}}
+
+
+
+\newcommand{\intpi}[1]{
+    \ifthenelse { \equal{#1}{} }
+                {\int_{-\pi}^{\pi}}
+                {\int_{#1=-\pi}^{\pi}}
+                }
+\newcommand{\intinfty}[1]{
+    \ifthenelse { \equal{#1}{} }
+                {\int_{-\infty}^{\infty}}
+                {\int_{#1=-\infty}^{\infty}}
+}
+\newcommand{\suminf}[1]{
+    \ifthenelse { \equal{#1}{} }
+                {\sum_{-\infty}^{\infty}}
+                {\sum_{#1=-\infty}^{\infty}}
+}
+\def\upsilonvec{{\mbox{\boldmath $\upsilon$}}}
+%\newcommand{\muvec}{{\bf{\mu}}}
+\newcommand{\alphavec}{{\bf{\alpha}}}
+%\newcommand{\psivec}{{\bf{\psi}}}
+%\newcommand{\xsivec}{{\bf{\xi}}}
+\newcommand{\deltakvec}{{\bf{\Delta}}}
+\newcommand{\Phivec}{{\bf{\Phi}}}
+\newcommand{\Lambdamat}{{\bf{\Lambda}}}
+\newcommand{\invLambdamat}{\Lambdamat^{-1}}
+\newcommand{\Gammamat}{{\bf{\Gamma}}}
+\newcommand{\Amat}{{\bf{A}}}
+\newcommand{\Bmat}{{\bf{B}}}
+\newcommand{\Cmat}{{\bf{C}}}
+\newcommand{\Dmat}{{\bf{D}}}
+\newcommand{\Emat}{{\bf{E}}}
+\newcommand{\Fmat}{{\bf{F}}}
+\newcommand{\Gmat}{{\bf{G}}}
+\newcommand{\Hmat}{{\bf{H}}}
+\newcommand{\Jmat}{{\bf{J}}}
+\newcommand{\Imat}{{\bf{I}}}
+\newcommand{\Lmat}{{\bf{L}}}
+\newcommand{\Kmat}{{\bf{K}}}
+\newcommand{\Pmat}{{\bf{P}}}
+\newcommand{\Mmat}{{\bf{M}}}
+\newcommand{\Pmatperp}{{\bf{P^{\bot}}}}
+\newcommand{\Ptmatperp}{{\bf{P_2^{\bot}}}}
+\newcommand{\Qmat}{{\bf{Q}}}
+\newcommand{\invQmat}{\Qmat^{-1}}
+\newcommand{\Smat}{{\bf{S}}}
+\newcommand{\Tmat}{{\bf{T}}}
+\newcommand{\Tmattilde}{\tilde{\bf{T}}}
+\newcommand{\Tmatcheck}{\check{\bf{T}}}
+\newcommand{\Tmatbar}{\bar{\bf{T}}}
+\newcommand{\Rmat}{{\bf{R}}}
+\newcommand{\Umat}{{\bf{U}}}
+\newcommand{\Vmat}{{\bf{V}}}
+\newcommand{\Wmat}{{\bf{W}}}
+\newcommand{\Xmat}{{\bf{X}}}
+\newcommand{\Ymat}{{\bf{Y}}}
+\newcommand{\Zmat}{{\bf{Z}}}
+\newcommand{\Zeromat}{\mbox{\normalfont\large\bfseries 0}}
+\newcommand{\Sigmamat}{{\bf{\Sigma}}}
+\newcommand{\Ry}{\Rmat_{\yvec}}
+\newcommand{\Rz}{\Rmat_{\zvec}}
+\newcommand{\RyInv}{\Rmat_{\yvec}^{-1}}
+\newcommand{\Ryhat}{\hat{\Rmat}_{\yvec}}
+\newcommand{\Rs}{\Rmat_{\svec}}
+\newcommand{\Rn}{\Rmat_{\nvec}}
+\newcommand{\Rninv}{\Rmat_{\nvec}^{-1}}
+\newcommand{\Reta}{\Rmat_{\etavec}}
+\newcommand{\Ralpha}{\Rmat_{\alphavec}}
+\newcommand{\Ck}{\Cmat_{\kvec}}
+\newcommand{\Cn}{\Cmat_{\nvec}}
+\newcommand{\Cg}{\Cmat_{\gvec}}
+\newcommand{\invRn}{\Rmat_{\nvec}^{-1}}
+\newcommand{\w}{{\rm{w}}}
+
+
+\newcommand{\dbsdalpha}{\Tmat_1 \frac{\partial b\svec_1(\alphavec )}{\partial \alphavec}}
+\newcommand{\dbsHdalpha}{\frac{\partial b\svec_1^H(\alphavec )}{\partial \alphavec} \Tmat_1^H}
+\newcommand{\dbstdalpha}{\Tmat_2 \frac{\partial b\svec_2(\alphavec )}{\partial \alphavec}}
+\newcommand{\dbstHdalpha}{\frac{\partial b\svec_2^H(\alphavec )}{\partial \alphavec} \Tmat_2^H}
+\newcommand{\dtdw}{\left[ \frac{d\hat{\theta} (\hat{\wvec})}{d \wvec} \right]_{\wvec = \wvec_o}}
+\newcommand{\dtdu}{\left[ \frac{d\hat{\theta} (\hat{\uvec})}{d \uvec} \right]_{\uvec = \uvec_o}}
+
+\newcommand{\Jww}{J_{\wvec \wvec}}
+\newcommand{\Jbb}{J_{\bvec \bvec}}
+\newcommand{\Jaa}{J_{\alphavec \alphavec}}
+\newcommand{\Jtb}{J_{\thetavec \bvec}}
+\newcommand{\Jbt}{J_{\bvec \thetavec}}
+\newcommand{\Jwt}{J_{\wvec \thetavec}}
+\newcommand{\Jtw}{J_{\thetavec \wvec}}
+\newcommand{\Jtu}{J_{\thetavec \uvec}}
+\newcommand{\Jtt}{J_{\thetavec \thetavec}}
+\newcommand{\Jee}{J_{\etavec \etavec}}
+\newcommand{\Jae}{J_{\alphavec \etavec}}
+\newcommand{\Jea}{J_{\etavec \alphavec}}
+\newcommand{\fww}{f_{\wvec \wvec}}
+\newcommand{\fwt}{f_{\wvec \thetavec}}
+\newcommand{\ftw}{f_{\thetavec \wvec}}
+\newcommand{\ftt}{f_{\thetavec \thetavec}}
+\newcommand{\Juu}{J_{\uvec \uvec}}
+\newcommand{\Jub}{J_{\uvec \bvec}}
+\newcommand{\Jbu}{J_{\bvec \uvec}}
+\newcommand{\Jaatilde}{\tilde{J}_{\alphavec \alphavec}}
+\newcommand{\Jqq}{J_{\qvec \qvec}}
+\newcommand{\Jaq}{J_{\alphavec \qvec}}
+\newcommand{\Jqa}{J_{\qvec \alphavec}}
+\newcommand{\JTT}{J_{\Thetavec \Thetavec}}
+\newcommand{\Tr}{{\rm Tr}}
+\newcommand{\vecc}{{\rm vec}}
+\newcommand{\Imm}{{\rm Im}}
+\newcommand{\Ree}{{\rm Re}}
+
+\newcommand{\define}{\stackrel{\triangle}{=}}
+
+
+%%% For BOLD Greek Letters
+
+\newcommand{\Psimat}{\mbox{\boldmath $\Psi$}}
+
+\newcommand{\bzeta}{\mbox{\boldmath $\zeta$}}
+
+\def\bzeta{{\mbox{\boldmath $\zeta$}}}
+
+\def\btheta{{\mbox{\boldmath $\theta$}}}
+
+\def\bgamma{{\mbox{\boldmath $\gamma$}}}
+
+\def\Beta{{\mbox{\boldmath $\eta$}}}
+
+\def\lam{{\mbox{\boldmath $\Gamma$}}}
+
+\def\bomega{{\mbox{\boldmath $\omega$}}}
+
+\def\bxi{{\mbox{\boldmath $\xi$}}}
+
+\def\brho{{\mbox{\boldmath $\rho$}}}
+
+\def\bmu{{\mbox{\boldmath $\mu$}}}
+
+\def\bnu{{\mbox{\boldmath $\nu$}}}
+
+\def\btau{{\mbox{\boldmath $\tau$}}}
+
+\def\bphi{{\mbox{\boldmath $\phi$}}}
+
+\def\bsigma{{\mbox{\boldmath $\Sigma$}}}
+
+\def\bLambda{{\mbox{\boldmath $\Lambda$}}}
+\def\blambda{{\mbox{\boldmath $\lambda$}}}
+
+
+
+
+%%% For BOLD Greek Letters
+
+\def\btheta{{\mbox{\boldmath $\theta$}}}
+\def\Thetavec{{\mbox{\boldmath $\Theta$}}}
+
+\def\bomega{{\mbox{\boldmath $\omega$}}}
+
+\def\brho{{\mbox{\boldmath $\rho$}}}
+
+\def\bmu{{\mbox{\boldmath $\mu$}}}
+
+\def\bGamma{{\mbox{\boldmath $\Gamma$}}}
+
+\def\bnu{{\mbox{\boldmath $\nu$}}}
+
+\def\btau{{\mbox{\boldmath $\tau$}}}
+
+\def\bphi{{\mbox{\boldmath $\phi$}}}
+
+\def\bPhi{{\mbox{\boldmath $\Phi$}}}
+
+\def\bxi{{\mbox{\boldmath $\xi$}}}
+
+
+\def\bvarphi{{\mbox{\boldmath $\varphi$}}}
+
+\def\bepsilon{{\mbox{\boldmath $\epsilon$}}}
+
+\def\balpha{{\mbox{\boldmath $\alpha$}}}
+
+\def\bvarepsilon{{\mbox{\boldmath $\varepsilon$}}}
+
+\def\bXsi{{\mbox{\boldmath $\Xi$}}}
+
+%% Ilya
+
+%\newcommand{\betavec}{{\bf{\beta}}}
+\def\betavec{{\mbox{\boldmath $\beta$}}}
+\def\betavecsc{{\mbox{\boldmath \tiny $\beta$}}}
+
+\def\psivec{{\mbox{\boldmath $\psi$}}}
+
+\def\xsivec{{\mbox{\boldmath $\xi$}}}
+\def\xsivecsc{{\mbox{\boldmath \tiny $\xsivec$}}}
+
+\def\alphavec{{\mbox{\boldmath $\alpha$}}}
+\def\alphavecsc{{\mbox{\boldmath \tiny $\alpha$}}}
+
+\def\gammavec{{\mbox{\boldmath $\gamma$}}}
+
+\def\etavec{{\mbox{\boldmath $\eta$}}}
+
+\def\thetavec{{\mbox{\boldmath $\theta$}}}
+\def\thetavecsc{{\mbox{\boldmath \tiny $\theta$}}}
+\def\deltavec{{\mbox{\boldmath $\delta$}}}
+
+\def\muvec{{\mbox{\boldmath $\mu$}}}
+
+\def\Ximat{{\mbox{\boldmath $\Xi$}}}
+
+\def\muvecsmall{{\mbox{\boldmath {\scriptsize $\mu$}}}}
+\def\Thetavec{{\mbox{\boldmath $\Theta$}}}
+\def\Thetavecsmall{{\mbox{\boldmath {\scriptsize $\Theta$}}}}
+\def\thetavecsmall{{\mbox{\boldmath {\scriptsize $\theta$}}}}
+\def\Phivecsmall{{\mbox{\boldmath {\scriptsize $\Phi$}}}}
+\def\phivecsmall{{\mbox{\boldmath {\scriptsize $\phi$}}}}
+\def\etavecsmall{{\mbox{\boldmath {\scriptsize $\eta$}}}}
+\def\alphavecsmall{{\mbox{\boldmath {\scriptsize $\alpha$}}}}
+\def\blambdasmall{{\mbox{\boldmath {\scriptsize $\lambda$}}}}
+\def\psivecsmall{{\mbox{\boldmath {\scriptsize $\psi$}}}}
+
+\newcommand{\be}{\begin{equation}}
+\newcommand{\ee}{\end{equation}}
+\newcommand{\beqna}{\begin{eqnarray}}
+\newcommand{\eeqna}{\end{eqnarray}}
+
+
+
+%\newcommand{\}{}
+%\mathaccent{\mjm}{$J_{m}$}
+
+\newcommand{\postscript}[4]
+{
+ \begin{figure}[htb]
+ \par
+ \hbox{\vbox to #1
+        {
+        \vfil
+        \special{psfile= #2.ps}
+        }
+      }
+ \caption{#3}
+ \label{#4}
+ \end{figure}
+}

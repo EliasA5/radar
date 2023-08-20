@@ -1,0 +1,108 @@
+%\documentclass[conference]{IEEEtran}
+%\documentclass[peerreview]{IEEEtran}
+\documentclass{article}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{ifthen}
+\input{myshorts}
+\usepackage{amsfonts,amsthm,amsmath,amssymb}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
+
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{graphicx,subcaption}
+\usepackage{caption}
+% \usepackage[noadjust]{cite}
+% \usepackage[ruled,vlined]{algorithm2e}
+% \usepackage[dvipsnames]{xcolor} %%
+\DeclareMathAlphabet{\pazocal}{OMS}{zplm}{m}{n}
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator{\EX}{\mathbb{E}}
+\newtheorem{Claim}{Claim}
+\newtheorem{prop}{Proposition}
+\newtheorem{Theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\usepackage{listings}
+
+% \renewcommand\thesection{\arabic{section}}
+% \renewcommand\thesubsection{\thesection.\arabic{subsection}}
+% \setcounter{section}{1}
+% \setcounter{subsection}{1}
+
+\usepackage{color} %red, green, blue, yellow, cyan, magenta, black, white
+\definecolor{mygreen}{RGB}{28,172,0} % color values Red, Green, Blue
+\definecolor{mylilas}{RGB}{170,55,241}
+
+\lstset{language=Matlab,%
+    %basicstyle=\color{red},
+    breaklines=true,%
+    morekeywords={matlab2tikz},
+    keywordstyle=\color{blue},%
+    morekeywords=[2]{1}, keywordstyle=[2]{\color{black}},
+    identifierstyle=\color{black},%
+    stringstyle=\color{mylilas},
+    commentstyle=\color{mygreen},%
+    showstringspaces=false,%without this there will be a symbol in the places where there is a space
+    numbers=left,%
+    numberstyle={\tiny \color{black}},% size of the numbers
+    numbersep=9pt, % this defines how far the numbers are from the text
+    emph=[1]{for,end,break,numel,arrayfun},emphstyle=[1]\color{blue}, %some words to emphasise
+    %emph=[2]{word1,word2}, emphstyle=[2]{style},
+    breakatwhitespace=true,
+    tabsize=3,
+    aboveskip=3mm,
+    belowskip=3mm,
+    columns=flexible,
+    basicstyle={\small\ttfamily},
+    frame=tb
+}
+
+\newcommand{\myfig}[4]{
+% #1 options
+% #2 name of file in figs folder
+% #3 caption
+% #4 label
+\begin{figure}[h]
+    \centering
+    \captionsetup{justification=centering}
+    \includegraphics[width=#1\columnwidth]{figs/#2} %TODO update directory
+    \caption{#3}
+    \label{fig:#4}
+\end{figure}
+}
+\newcommand{\reff}[1]{Fig. \ref{fig:#1}}
+\usepackage{cancel}
+
+
+\title{Multimedia Compression Project\\Supersampling}
+\author{Elias Assaf - 315284729\\
+Ghada Abu Elzalaf - 319004594}
+\date{\today}
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+% \begin{abstract}
+%     TODO: abstract
+% \end{abstract}
+% \begin{IEEEkeywords}
+%     TODO: keywords
+% \end{IEEEkeywords}
+ 
+\section{}
+\subsection{}
+\subsection{}
+
+\section{}
+
+ 
+
+\end{document}

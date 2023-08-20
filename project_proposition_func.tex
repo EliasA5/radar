@@ -1,0 +1,106 @@
+%\documentclass[conference]{IEEEtran}
+%\documentclass[peerreview]{IEEEtran}
+\documentclass{article}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{ifthen}
+\input{myshorts}
+\usepackage{amsfonts,amsthm,amsmath,amssymb}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
+
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{graphicx,subcaption}
+\usepackage{caption}
+\usepackage{outlines}
+% \usepackage[noadjust]{cite}
+% \usepackage[ruled,vlined]{algorithm2e}
+% \usepackage[dvipsnames]{xcolor} %%
+\DeclareMathAlphabet{\pazocal}{OMS}{zplm}{m}{n}
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator{\EX}{\mathbb{E}}
+\newtheorem{Claim}{Claim}
+\newtheorem{prop}{Proposition}
+\newtheorem{Theorem}{Theorem}
+\newtheorem{corollary}{Corollary}
+\usepackage{listings}
+\newcommand{\B}[1]{\textbf{#1}}
+
+% \renewcommand\thesection{\arabic{section}}
+% \renewcommand\thesubsection{\thesection.\arabic{subsection}}
+% \setcounter{section}{1}
+% \setcounter{subsection}{1}
+
+\usepackage{color} %red, green, blue, yellow, cyan, magenta, black, white
+\definecolor{mygreen}{RGB}{28,172,0} % color values Red, Green, Blue
+\definecolor{mylilas}{RGB}{170,55,241}
+
+\newcommand{\myfig}[4]{
+% #1 options
+% #2 name of file in figs folder
+% #3 caption
+% #4 label
+\begin{figure}[h]
+    \centering
+    \captionsetup{justification=centering}
+    \includegraphics[width=#1\columnwidth]{figs_prop/#2}
+    \caption{#3}
+    \label{fig:#4}
+\end{figure}
+}
+\newcommand{\reff}[1]{Fig. \ref{fig:#1}}
+\usepackage{cancel}
+
+
+\title{Project Proposition}
+\author{Elias Assaf - 315284729\\
+        Ron Zilbershtein - }
+\date{\today}
+\begin{document}
+
+\maketitle
+% \tableofcontents
+% \newpage
+% \begin{abstract}
+%     TODO: abstract
+% \end{abstract}
+% \begin{IEEEkeywords}
+%     TODO: keywords
+% \end{IEEEkeywords}
+ %\myfig{size [01]}{filename.png}{caption}{label for later reference}
+ 
+ \section{Architecture}
+  We propose the following architecture (subject to change) which will run on multiple computers:
+ \myfig{0.9}{Project_flow.drawio.png}{Project Architecture}{}\\
+
+\subsection{GUI}
+The GUI is a gen\_server, that can handle wx events such as the buttons, communication with the top level operators on the connected nodes.\\
+Receives sensor information from each operator which receives from each communication process, and operates on them.
+\subsection{Operator}
+Also a gen\_server, its job is to manage the communication ports that talk to the msp430's, by spawning them, formatting the messages related to them, and informing the GUI for new connections/disconnections that happen dynamically.
+\newpage
+\subsection{Communication}
+A gen\_statem that implements a simple stop and wait protocol to communicate to the msp430 using the RS-232 (UART) protocol, to ensure reliability and correctness of the communication.\\
+Note that we only use stop and wait when sending messages to the msp430 (to receive acks), not when we are receiving information from them.\\
+\myfig{0.6}{Communication.drawio.png}{PC Side communication state machine}{}
+\myfig{0.5}{Communication-msp430.drawio.png}{MSP430 Side communication state machine}{}
+\\
+We leverage gen\_statem postpone transition action, which puts the events on a separated queue, and retries the events in the same order of arrival whenever we do a state change (to idle for example).\\
+Since communication can fail on the serial link we need to have a fail-safe, we get the following cases:
+\begin{itemize}
+    \item Unexpected ack from the MSP430.\\
+    That means that it received a wrong command or the communication port restarted, so we try to reset it to idle state until we succeed.
+    \item Not responding (timeout).\\
+    Should not happen in normal stances, because if we disconnect the MSP430, the port also closes which sends an exit signal to our process, if it does happen it probably means that the MSP430 hanged somewhere, we can either crash the process and mark the port as broken, or we can try to reset the MSP430 to idle as before.
+\end{itemize}
+
+
+
+\end{document}
