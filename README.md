@@ -5,6 +5,13 @@ Distributed Radar project using msp430 devices with LDR and sonic sensors as rad
 
 The main branch is for the erlang source, the msp430 is for the msp c source and image.
 
+Demo
+-----
+
+[![RadarNet](https://img.youtube.com/vi/WdKlJbT4irk/0.jpg)](https://www.youtube.com/watch?v=WdKlJbT4irk)
+
+Can also be viewed by clicking [here](https://img.youtube.com/vi/WdKlJbT4irk/0.jpg).
+
 Build
 -----
 
